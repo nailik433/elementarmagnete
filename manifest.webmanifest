@@ -1,0 +1,14 @@
+{
+  "name": "Elementarmagnete – Nagel magnetisieren",
+  "short_name": "Elementarmagnete",
+  "lang": "de",
+  "start_url": "./nagel_magnetisierung.html",
+  "scope": "./",
+  "display": "fullscreen",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
