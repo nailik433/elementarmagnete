@@ -3,7 +3,11 @@
 Interaktive Lehranimation für Physik Klasse 7 (Magnetismus): Magnetisieren und
 Entmagnetisieren eines Eisennagels im Modell der Elementarmagnete.
 
-## Start
+## Online
+
+https://nailik433.github.io/elementarmagnete/
+
+## Start (offline)
 
 `nagel_magnetisierung.html` per Doppelklick öffnen (Chrome, Edge oder Firefox).
 Die Datei läuft komplett offline, ohne Internet und ohne weitere Dateien.
