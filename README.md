@@ -26,6 +26,12 @@ Mit **F** in den Vollbildmodus wechseln.
 Bonus (über die Schaltflächen auf der Zusammenfassung, das Menü oder die Tasten):
 Magnet teilen (**T**) und Umpolen (**U**).
 
+**Freies Experimentieren** (Taste **E**, Punkt „Frei“ unten rechts, Menü oder Zusammenfassung):
+Jede Aktion einzeln und in beliebiger Reihenfolge am selben Nagel auslösen –
+Streichen mit N oder S, Klopfen, Erhitzen/Abkühlen, Teilen/Zusammenfügen, Kompass,
+neuer Nagel (Tasten **1–7**). Der Nagel reagiert physikalisch passend, z. B. bleibt
+Streichen am glühenden Nagel wirkungslos.
+
 Vor den Etappen 3, 5, 6 und Bonus „Magnet teilen“ erscheint eine Vorhersage-Karte.
 
 ## Tasten
@@ -39,6 +45,7 @@ Vor den Etappen 3, 5, 6 und Bonus „Magnet teilen“ erscheint eine Vorhersage-
 | V | Vorhersage-Pausen an/aus |
 | K / L / C | Kompassprobe / Feldlinien / Klammern im Inneren |
 | T / U | Bonus: Magnet teilen / Bonus: Umpolen |
+| E / 1–7 | Freies Experimentieren / dort die Aktionen |
 | B / H | Bedienfeld aus/ein / Bedienhilfe |
 
 Präsentations-Fernbedienungen (Bild auf/ab) funktionieren wie ← und →.
