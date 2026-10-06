@@ -67,7 +67,19 @@
   #help td.k { font-weight: bold; white-space: nowrap; width: 330px; }
   #help .close { text-align: center; margin-top: 22px; font-size: 34px; color: #444; }
 
-  #bonusBtns { position: absolute; left: 0; right: 0; top: 790px; display: flex; justify-content: center; gap: 60px; }
+  #bonusBtns { position: absolute; left: 0; right: 0; top: 790px; display: flex; justify-content: center; gap: 40px; }
+
+  /* Aktions-Schaltflächen im freien Experimentieren (unter dem Titel) */
+  #freeBar { position: absolute; left: 30px; right: 30px; top: 80px; height: 72px; display: flex; gap: 14px; }
+  .fbtn {
+    flex: 1; min-width: 0; height: 72px; padding: 0 6px;
+    font: bold 29px Arial, Helvetica, sans-serif; color: #1d3557;
+    background: #ffffff; border: 4px solid #1d3557; border-radius: 16px; cursor: pointer;
+  }
+  .fbtn:hover { background: #eef3fa; }
+  .fbtn.reset { color: #6b2c00; border-color: #9a4a12; }
+  .fbtn.busy { opacity: 0.4; cursor: default; }
+  .dot.free { width: 46px; font-size: 13px; }
 
   /* ---------- Bedienfeld (echte Pixel, nicht skaliert) ---------- */
   #bar {
@@ -144,8 +156,20 @@
 
   <!-- Bonus-Schaltflächen auf der Zusammenfassung -->
   <div id="bonusBtns" class="hidden">
-    <button id="bonus7" class="bigbtn light">Bonus: Magnet teilen (T)</button>
-    <button id="bonus8" class="bigbtn light">Bonus: Umpolen (U)</button>
+    <button id="bonus7" class="bigbtn light">Magnet teilen (T)</button>
+    <button id="bonus8" class="bigbtn light">Umpolen (U)</button>
+    <button id="bonus10" class="bigbtn light">Freies Experimentieren (E)</button>
+  </div>
+
+  <!-- Aktionen im freien Experimentieren (Tasten 1–7) -->
+  <div id="freeBar" class="hidden">
+    <button id="fa0" class="fbtn" title="Taste 1">Streichen mit N</button>
+    <button id="fa1" class="fbtn" title="Taste 2">Streichen mit S</button>
+    <button id="fa2" class="fbtn" title="Taste 3">Klopfen</button>
+    <button id="fa3" class="fbtn" title="Taste 4">Erhitzen</button>
+    <button id="fa4" class="fbtn" title="Taste 5">Teilen</button>
+    <button id="fa5" class="fbtn" title="Taste 6">Kompass</button>
+    <button id="fa6" class="fbtn reset" title="Taste 7">Neuer Nagel</button>
   </div>
 
   <!-- Bedienhilfe -->
@@ -160,6 +184,7 @@
         <tr><td class="k">V</td><td>Vorhersage-Pausen an/aus</td></tr>
         <tr><td class="k">K / L / C</td><td>Kompassprobe / Feldlinien / Klammern im Inneren</td></tr>
         <tr><td class="k">T / U</td><td>Bonus: Magnet teilen / Bonus: Umpolen</td></tr>
+        <tr><td class="k">E / 1–7</td><td>Freies Experimentieren / dort die Aktionen</td></tr>
         <tr><td class="k">B / H</td><td>Bedienfeld aus/ein / diese Hilfe</td></tr>
       </table>
       <div class="close">H oder Klick schließt die Hilfe.</div>
@@ -200,6 +225,7 @@
   <button class="mi" data-act="compass"><span>Kompassprobe</span><span class="key">K</span></button>
   <button class="mi" data-act="bonus7"><span>Bonus: Magnet teilen</span><span class="key">T</span></button>
   <button class="mi" data-act="bonus8"><span>Bonus: Umpolen</span><span class="key">U</span></button>
+  <button class="mi" data-act="free"><span>Freies Experimentieren<small>Jede Aktion einzeln und in beliebiger Reihenfolge</small></span><span class="key">E</span></button>
   <button class="mi" data-act="help"><span>Bedienhilfe</span><span class="key">H</span></button>
   <button class="mi" data-act="reset"><span>Alles auf Anfang</span><span class="key">N</span></button>
 </div>
@@ -303,6 +329,9 @@
       jitPos: 1.4,                // Zitter-Verschiebung in px
       bar: { vis: 0, x: 0, y: 0, ang: PI, sc: 1, float: false },
       arcA: 0,
+      sx0: G.strokeX0, sx1: G.strokeX1,   // Strichbereich (für den Bogenpfad)
+      action: null,                      // laufende Aktion im freien Experimentieren
+      freeK: 0, freeTarget: null, hot: false,
       strokeDone: null,
       clips: [],
       clipAuto: false,
@@ -535,32 +564,43 @@
   var HINT1 = 'Immer in dieselbe Richtung streichen,';
   var HINT2 = 'Magnet zurück durch die Luft.';
 
+  // Anteil der Elementarmagnete, die Strich 1, 2, 3 ausrichtet
+  var STROKE_FR = [0.65, 0.90, 1.0];
+  function alignMagnet(m, k, target) {
+    m.rel = false;   // ein heißer Nagel (freies Experimentieren) bringt sie sofort wieder durcheinander
+    if (m.rank < STROKE_FR[k]) {
+      var dev = 0;
+      if (k === 2 && m.rank > 0.94) dev = (m.rank2 - 0.5) * 0.4;   // wenige weichen leicht ab
+      else if (k < 2) dev = (m.rank2 - 0.5) * 0.12;
+      rotTo(m, target + dev, 0.4 + 0.4 * m.rank2);
+      m.jwT = 0.3;
+    } else {
+      // nicht erfasste Magnete drehen sich nur ein Stück in Strichrichtung
+      var c = angOf(m);
+      rotTo(m, c + 0.35 * wrapPi(target - c), 0.5 + 0.3 * m.rank2);
+    }
+  }
+  // x-Position einer Spalte auf der Bühne (berücksichtigt einen geteilten Nagel)
+  function worldColX(c) {
+    var segs = segments();
+    for (var i = 0; i < segs.length; i++) if (c >= segs[i].c0 && c <= segs[i].c1) return colX(c) + segs[i].dx;
+    return colX(c);
+  }
+  // Wenn der Pol über eine Spalte gezogen wird, drehen sich deren Elementarmagnete
+  function strokeInfluence(k, target) {
+    for (var c = 0; c < G.cols; c++) {
+      if (!W.strokeDone[c] && W.bar.x >= worldColX(c) - 15) {
+        W.strokeDone[c] = true;
+        W.mags.forEach(function (m) { if (m.c === c) alignMagnet(m, k, target); });
+      }
+    }
+  }
+
   // Drei Striche mit dem Stabmagneten (Etappe 3: Nordpol, Ziel N links; Etappe 8: Südpol, Ziel N rechts)
   function strokeSteps(target) {
-    var fr = [0.65, 0.90, 1.0];
     var X0 = G.strokeX0, X1 = G.strokeX1, cyS = G.strokeCY, LIFT = 60;
     var steps = [];
-    function alignMagnet(m, k) {
-      if (m.rank < fr[k]) {
-        var dev = 0;
-        if (k === 2 && m.rank > 0.94) dev = (m.rank2 - 0.5) * 0.4;   // wenige weichen leicht ab
-        else if (k < 2) dev = (m.rank2 - 0.5) * 0.12;
-        rotTo(m, target + dev, 0.4 + 0.4 * m.rank2);
-        m.jwT = 0.3;
-      } else {
-        // nicht erfasste Magnete drehen sich nur ein Stück in Strichrichtung
-        var c = angOf(m);
-        rotTo(m, c + 0.35 * wrapPi(target - c), 0.5 + 0.3 * m.rank2);
-      }
-    }
-    function influence(k) {
-      for (var c = 0; c < G.cols; c++) {
-        if (!W.strokeDone[c] && W.bar.x >= colX(c) - 15) {
-          W.strokeDone[c] = true;
-          W.mags.forEach(function (m) { if (m.c === c) alignMagnet(m, k); });
-        }
-      }
-    }
+    function influence(k) { strokeInfluence(k, target); }
     [0, 1, 2].forEach(function (k) {
       var label = 'Strich ' + (k + 1) + ' / 3';
       if (settings.manual) {
@@ -787,6 +827,18 @@
       }
     },
 
+    10: {
+      title: 'Freies Experimentieren',
+      text: '',
+      free: true,
+      enter: function () {
+        setView(prefView, 0);
+        freshFreeNail();
+        setCallout(['Wähle oben eine Aktion.', 'Die Aktionen lassen sich beliebig kombinieren.'], 'bottom');
+      },
+      steps: function () { return []; }
+    },
+
     9: {
       title: 'Zusammenfassung',
       text: 'Das schreiben wir ins Heft.',
@@ -826,6 +878,196 @@
       W.curieShown = true;
       setCallout(['Curie-Temperatur von Eisen: 770 °C', 'Die Elementarmagnete sind völlig ungeordnet.'], 'top');
     }
+  }
+
+  /* ---------------------------------------------------------------------
+     Freies Experimentieren: Jede Aktion wirkt auf den aktuellen Zustand
+     des Nagels und lässt sich beliebig oft und in beliebiger Reihenfolge
+     auslösen. Eine Aktion läuft als eigener Runner (W.action).
+     --------------------------------------------------------------------- */
+
+  function freshFreeNail() {
+    randomMagnets(); makeClips();
+    W.poleShow = 1; W.bondStage = true; W.clipAuto = true;
+    W.cut = 0; W.gap = 0; W.cutPoles = 0;
+    W.T = 20; W.flame = 0; W.thermo = 0; W.glow = 0; W.hot = false;
+    W.bar = { vis: 0, x: G.strokeX0, y: G.strokeCY - 60, ang: PI / 2, sc: 1, float: false };
+    W.hammer = { vis: 0, x: 600, rot: 0.45 };
+    W.freeK = 0; W.freeTarget = null; W.action = null; W.arcA = 0;
+    W.tick = freeTick;
+  }
+
+  // Zittern und Glühen hängen von der Temperatur ab; oberhalb der „Loslass“-Temperatur
+  // verliert jeder Elementarmagnet seine Richtung (auch direkt nach einem Strich).
+  function freeTick() {
+    var T = W.T;
+    W.jit = 4 + 34 * Math.pow(clamp((T - 20) / 750), 1.6);
+    W.jitPos = 1.4 + 2.6 * clamp((T - 20) / 750);
+    W.glow = smooth(420, 770, T);
+    W.mags.forEach(function (m) {
+      if (!m.rel && T >= m.tRel) { m.rel = true; rotTo(m, rnd() * TAU, 0.8); m.jwT = 1; }
+      else if (m.rel && T < 500) m.rel = false;
+    });
+    if (!W.curieShown && T >= 770) {
+      W.curieShown = true;
+      flashCallout(['Curie-Temperatur von Eisen: 770 °C', 'Die Elementarmagnete sind völlig ungeordnet.'], 'bottom', 4);
+    }
+    if (T < 700) W.curieShown = false;
+  }
+
+  // Zustand des Nagels nach einer Aktion in Worten (nach den Zielwinkeln, nicht den Zwischenständen)
+  function reportFree(title) {
+    var sx = 0; W.mags.forEach(function (m) { sx += Math.cos(m.to); }); sx /= W.mags.length;
+    var a = Math.abs(sx), line;
+    if (W.T >= 700) line = 'Heiß: Der Nagel ist nicht magnetisch.';
+    else if (a > 0.8) line = 'Magnetisch: links ' + (sx < 0 ? 'Nordpol' : 'Südpol') + ', rechts ' + (sx < 0 ? 'Südpol' : 'Nordpol') + '.';
+    else if (a > 0.35) line = 'Der Nagel ist schwach magnetisch.';
+    else line = 'Der Nagel ist nicht magnetisch.';
+    flashCallout([title, line], 'bottom', 4.5);
+  }
+
+  function startAction(steps) {
+    if (cur !== 10 || W.action) return;
+    W.co = null;
+    W.action = new Runner(steps);
+  }
+
+  function freeStroke(target) {
+    if (W.freeTarget !== target) { W.freeK = 0; W.freeTarget = target; }
+    var k = Math.min(W.freeK, 2), n = W.freeK + 1;
+    W.freeK++;
+    var cyS = G.strokeCY, LIFT = 60, X0 = 0, X1 = 0;
+    var poleName = target === PI ? 'Nordpol' : 'Südpol';
+    startAction([
+      {
+        d: 0.4,
+        s: function () {
+          X0 = worldColX(0) + 12; X1 = worldColX(15) + 5;
+          W.sx0 = X0; W.sx1 = X1;
+          W.bar = { vis: 0, x: X0, y: cyS - LIFT, ang: target === PI ? PI / 2 : -PI / 2, sc: 1, float: false };
+          flashCallout(['Strich ' + n + ' mit dem ' + poleName], 'bottom', 7);
+        },
+        u: function (p) { W.bar.vis = p; W.poleShow = Math.min(W.poleShow, 1 - p); }
+      },
+      { d: 0.5, u: function (p) { W.bar.y = lerp(cyS - LIFT, cyS, easeInOut(p)); } },
+      {
+        d: 2.8,
+        s: function () { W.strokeDone = []; for (var c = 0; c < G.cols; c++) W.strokeDone.push(false); },
+        u: function (p) { W.bar.x = lerp(X0, X1, easeSine(p)); strokeInfluence(k, target); },
+        e: function () { W.bar.x = X1; strokeInfluence(k, target); }
+      },
+      {
+        d: 2.0,
+        u: function (p) {
+          var u = easeInOut(p);
+          W.bar.x = lerp(X1, X0, u);
+          W.bar.y = cyS - (LIFT * u + 65 * Math.sin(PI * u));
+          W.arcA = Math.min(1, p * 5, (1 - p) * 5);
+        },
+        e: function () { W.arcA = 0; }
+      },
+      { d: 0.4, u: function (p) { W.bar.vis = 1 - p; W.poleShow = p; } },
+      { d: 0, s: function () { reportFree('Strich ' + n + ' mit dem ' + poleName); } }
+    ]);
+  }
+
+  function freeHammer() {
+    var x = 0;
+    startAction([
+      {
+        d: 0.35,
+        s: function () { x = 520 + rnd() * 880; W.hammer = { vis: 0, x: x, rot: 0.45 }; W.freeK = 0; },
+        u: function (p) { W.hammer.vis = p; }
+      },
+      { d: 0.2 },
+      {
+        d: 0.14,
+        u: function (p) { W.hammer.rot = 0.45 * (1 - easeIn(p)); },
+        e: function () {
+          W.joltT = S; W.impacts.push({ x: x, t0: S });
+          // ein Teil der Elementarmagnete wird in zufällige Richtungen gestoßen
+          W.mags.forEach(function (m) {
+            if (rnd() < 0.3) { rotTo(m, rnd() * TAU, 0.35 + 0.35 * m.rank2); m.jwT = 1; }
+          });
+        }
+      },
+      { d: 0.35, u: function (p) { W.hammer.rot = 0.35 * easeOut(p); } },
+      { d: 0.45, u: function (p) { W.hammer.vis = 1 - p; } },
+      { d: 0, s: function () { reportFree('Schlag mit dem Hammer'); } }
+    ]);
+  }
+
+  function freeHeat() {
+    if (W.hot) {
+      var T0 = 0;
+      startAction([
+        { d: 0.8, s: function () { T0 = W.T; flashCallout(['Flamme aus: Der Nagel kühlt ab.'], 'bottom', 6); }, u: function (p) { W.flame = 1 - easeIn(p); } },
+        { d: 5, u: function (p) { W.T = lerp(T0, 20, easeOut(p)); } },
+        { d: 0, s: function () { W.hot = false; reportFree('Abgekühlt'); } }
+      ]);
+    } else {
+      var T1 = 0;
+      startAction([
+        { d: 0, s: function () { W.thermo = 1; W.hot = true; W.freeK = 0; T1 = W.T; flashCallout(['Der Nagel wird erhitzt …'], 'bottom', 7); } },
+        { d: 0.8, u: function (p) { W.flame = easeOut(p); } },
+        { d: 6, u: function (p) { W.T = lerp(T1, 800, easeSine(p)); } },
+        { d: 0.6 },
+        { d: 0, s: function () { reportFree('Erhitzt auf 800 °C'); } }
+      ]);
+    }
+  }
+
+  // Beim Teilen wandern die beiden inneren Büroklammern an die neuen Pole (und zurück)
+  function moveInnerClips(split) {
+    var l = clipById('I_L'), r = clipById('I_R');
+    dropClip(l); dropClip(r);
+    l.slot = split ? 'CUT_L' : 'I_L';
+    r.slot = split ? 'CUT_R' : 'I_R';
+  }
+  function freeSplit() {
+    if (W.cut >= 1) {
+      var g0 = 0;
+      startAction([
+        { d: 0, s: function () { g0 = W.gap; moveInnerClips(false); } },
+        { d: 1.0, u: function (p) { W.gap = g0 * (1 - easeInOut(p)); W.cutPoles = 1 - p; } },
+        { d: 0, s: function () { W.cut = 0; W.gap = 0; W.cutPoles = 0; reportFree('Zusammengefügt'); } }
+      ]);
+    } else {
+      startAction([
+        { d: 0, s: function () { moveInnerClips(true); } },
+        { d: 1.0, u: function (p) { W.cut = Math.min(0.999, p); }, e: function () { W.cut = 1; } },
+        { d: 0.3 },
+        { d: 1.2, u: function (p) { W.gap = 60 * easeInOut(p); W.cutPoles = easeOut(clamp(p * 2)); } },
+        { d: 0, s: function () { reportFree('In der Mitte geteilt'); } }
+      ]);
+    }
+  }
+  function freeReset() {
+    if (cur !== 10) return;
+    freshFreeNail();
+    W.compass.on = false;
+    W.co = null;
+    flashCallout(['Neuer Nagel', 'Der Nagel ist nicht magnetisch.'], 'bottom', 4);
+  }
+  var FREE_ACTIONS = [
+    function () { freeStroke(PI); },
+    function () { freeStroke(0); },
+    freeHammer,
+    freeHeat,
+    freeSplit,
+    function () { startCompass(); },
+    freeReset
+  ];
+  // Schaltflächen im freien Experimentieren aktualisieren (nur bei Änderungen)
+  var freeUIKey = '';
+  function updateFreeUI() {
+    var key = [cur === 10, !!W.action, W.hot, W.cut >= 1].join();
+    if (key === freeUIKey) return;
+    freeUIKey = key;
+    $('freeBar').classList.toggle('hidden', cur !== 10);
+    $('fa3').textContent = W.hot ? 'Abkühlen' : 'Erhitzen';
+    $('fa4').textContent = W.cut >= 1 ? 'Zusammenfügen' : 'Teilen';
+    for (var i = 0; i < 5; i++) $('fa' + i).classList.toggle('busy', !!W.action);
   }
 
   /* =====================================================================
@@ -884,6 +1126,8 @@
     $('pq').textContent = st.q || '';
     $('predict').classList.toggle('hidden', !predicting);
     $('bonusBtns').classList.toggle('hidden', id !== 9);
+    freeUIKey = '';
+    updateFreeUI();
     headerCache = null;
     updateUI();
   }
@@ -892,12 +1136,14 @@
     $('predict').classList.add('hidden');
   }
   function next() {
+    if (cur === 10) return;              // freies Experimentieren: Leertaste verlässt den Modus nicht
     if (cur === 7) return goto(8);
     if (cur === 8) return goto(9);
     var i = MAIN.indexOf(cur);
     if (i >= 0 && i < MAIN.length - 1) goto(MAIN[i + 1]);
   }
   function prev() {
+    if (cur === 10) return goto(9);
     if (cur === 7) return goto(9);
     if (cur === 8) return goto(7);
     var i = MAIN.indexOf(cur);
@@ -976,6 +1222,10 @@
       case 'b': toggleBar(); break;
       case 't': goto(7); break;
       case 'u': goto(8); break;
+      case 'e': goto(10); break;
+      case '1': case '2': case '3': case '4': case '5': case '6': case '7':
+        if (cur === 10) FREE_ACTIONS[+k - 1]();
+        break;
       case 'escape': $('menu').classList.add('hidden'); $('help').classList.add('hidden'); break;
     }
   });
@@ -996,6 +1246,8 @@
   onClick('pbtn', resolvePrediction);
   onClick('bonus7', function () { goto(7); });
   onClick('bonus8', function () { goto(8); });
+  onClick('bonus10', function () { goto(10); });
+  FREE_ACTIONS.forEach(function (fn, i) { onClick('fa' + i, fn); });
   $('help').addEventListener('click', toggleHelp);
   Array.prototype.forEach.call(document.querySelectorAll('#menu .mi'), function (b) {
     b.addEventListener('click', function () {
@@ -1004,6 +1256,7 @@
       if (a === 'compass') { $('menu').classList.add('hidden'); startCompass(); }
       if (a === 'bonus7') { $('menu').classList.add('hidden'); goto(7); }
       if (a === 'bonus8') { $('menu').classList.add('hidden'); goto(8); }
+      if (a === 'free') { $('menu').classList.add('hidden'); goto(10); }
       if (a === 'help') { $('menu').classList.add('hidden'); toggleHelp(); }
       if (a === 'reset') { $('menu').classList.add('hidden'); resetAll(); }
       b.blur();
@@ -1024,6 +1277,10 @@
       b.title = STAGES[id].title;
       d.appendChild(b);
     });
+    var f = document.createElement('button');
+    f.className = 'dot bonus free'; f.textContent = 'Frei'; f.setAttribute('data-id', 10);
+    f.title = 'Freies Experimentieren (E)';
+    d.appendChild(f);
     Array.prototype.forEach.call(d.children, function (b) {
       b.addEventListener('click', function () { goto(+b.getAttribute('data-id')); b.blur(); });
     });
@@ -1031,7 +1288,7 @@
 
   function updateUI() {
     var i = MAIN.indexOf(cur);
-    $('stepTxt').textContent = i >= 0 ? (i + 1) + ' / ' + MAIN.length : 'Bonus ' + (cur - 6);
+    $('stepTxt').textContent = i >= 0 ? (i + 1) + ' / ' + MAIN.length : (cur === 10 ? 'Frei' : 'Bonus ' + (cur - 6));
     Array.prototype.forEach.call($('dots').children, function (b) {
       var id = +b.getAttribute('data-id');
       b.classList.toggle('cur', id === cur);
@@ -1078,6 +1335,7 @@
   function update(dt) {
     S += dt;
     if (!predicting && run) run.update(dt);
+    if (W.action) { W.action.update(dt); if (W.action.i >= W.action.steps.length) W.action = null; }
     W.mx = meanCos(W.mags);
     var v = W.view;
     v.v = v.dur > 0 ? lerp(v.from, v.to, clamp((S - v.t0) / v.dur)) : v.to;
@@ -1094,6 +1352,7 @@
     var g = geom();
     updateClips(dt, g);
     updateCompass(dt, g);
+    updateFreeUI();
   }
 
   // Kompassprobe: Kompass fährt an das linke, dann an das rechte Nagelende
@@ -1434,7 +1693,7 @@
     for (var i = 0; i <= 60; i++) {
       var u = i / 60;
       lx = px; ly = py;
-      px = lerp(G.strokeX1, G.strokeX0, u);
+      px = lerp(W.sx1, W.sx0, u);
       py = tipY - (60 * u + 65 * Math.sin(PI * u));
       if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
@@ -1647,6 +1906,11 @@
   function drawHeader() {
     var st = STAGES[cur];
     ctx.fillStyle = COL.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    if (st.free) {   // darunter liegen die Aktions-Schaltflächen
+      ctx.font = 'bold 52px ' + FONT;
+      ctx.fillText(st.title, 960, 62);
+      return;
+    }
     ctx.font = 'bold 60px ' + FONT;
     ctx.fillText(st.title, 960, 76);
     ctx.font = '38px ' + FONT;
