@@ -7,6 +7,13 @@ Entmagnetisieren eines Eisennagels im Modell der Elementarmagnete.
 
 https://nailik433.github.io/elementarmagnete/
 
+## iPad
+
+- Am besten **quer** halten. Bedienung per Antippen; auf der Bühne **nach links wischen = weiter**,
+  **nach rechts wischen = zurück**.
+- **Als App installieren:** Seite in Safari öffnen → Teilen → „Zum Home-Bildschirm“. Die App startet
+  im Vollbild und funktioniert nach dem ersten Öffnen auch **ohne Internet**.
+
 ## Start (offline)
 
 `nagel_magnetisierung.html` per Doppelklick öffnen (Chrome, Edge oder Firefox).

@@ -2,7 +2,15 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- iPad/iPhone: als App zum Home-Bildschirm hinzufügen (startet im Vollbild) -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Elementarmagnete">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#ffffff">
+<meta name="format-detection" content="telephone=no">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>Nagel magnetisieren und entmagnetisieren – Elementarmagnete</title>
 <!--
   Lehranimation Physik Klasse 7: Magnetisieren und Entmagnetisieren eines Eisennagels
@@ -23,6 +31,18 @@
     font-family: Arial, Helvetica, sans-serif;
     color: #111;
     -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;              /* kein Kontextmenü bei langem Tippen (iPad) */
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation;               /* kein Doppeltipp-Zoom */
+    overscroll-behavior: none;
+  }
+  /* Fester Rahmen: verhindert, dass mobile Browser die Seite auf die 1920 px der Bühne aufziehen */
+  #app { position: fixed; left: 0; top: 0; right: 0; bottom: 0; overflow: hidden; }
+  #safeProbe { position: fixed; left: 0; bottom: 0; width: 1px; height: env(safe-area-inset-bottom, 0px); visibility: hidden; pointer-events: none; }
+  #rotateHint {
+    position: fixed; z-index: 9; left: 0; right: 0; text-align: center;
+    font: 18px Arial, Helvetica, sans-serif; color: #555; pointer-events: none;
   }
   /* Bühne: virtuell 1920×1080, wird per transform auf das Fenster skaliert */
   #stage {
@@ -55,9 +75,9 @@
     min-height: 100px; padding: 0 56px; border-radius: 20px;
     border: 4px solid #1d3557; background: #1d3557; color: #fff; cursor: pointer;
   }
-  .bigbtn:hover { background: #274b77; }
+  @media (hover: hover) { .bigbtn:hover { background: #274b77; } }
   .bigbtn.light { background: #ffffff; color: #1d3557; }
-  .bigbtn.light:hover { background: #eef3fa; }
+  @media (hover: hover) { .bigbtn.light:hover { background: #eef3fa; } }
 
   #help { background: rgba(255,255,255,0.72); }
   #help .card { width: 1500px; text-align: left; padding: 40px 60px; }
@@ -76,10 +96,28 @@
     font: bold 29px Arial, Helvetica, sans-serif; color: #1d3557;
     background: #ffffff; border: 4px solid #1d3557; border-radius: 16px; cursor: pointer;
   }
-  .fbtn:hover { background: #eef3fa; }
+  @media (hover: hover) { .fbtn:hover { background: #eef3fa; } }
   .fbtn.reset { color: #6b2c00; border-color: #9a4a12; }
   .fbtn.busy { opacity: 0.4; cursor: default; }
+  /* Hochformat: Aktionen unter dem Bedienfeld in echter Fingergröße statt klein in der Bühne */
+  #freeBar.outside { position: fixed; z-index: 9; left: 10px; right: 10px; top: auto; height: auto; flex-wrap: wrap; gap: 10px; }
+  #freeBar.outside .fbtn { flex: 1 1 30%; height: 60px; font-size: 19px; border-width: 3px; border-radius: 12px; }
   .dot.free { width: 46px; font-size: 13px; }
+
+  /* Rückmeldung beim Antippen (Touch) */
+  .cb:active, .bigbtn:active, .fbtn:active, .mi:active, .dot:active { filter: brightness(0.88); }
+  .fbtn.busy:active { filter: none; }
+
+  /* Schmalere Fenster (z. B. iPad quer): kompaktere Schaltflächen in einer Zeile */
+  #bar.compact .cb { min-width: 64px; padding: 4px 6px; font-size: 12px; }
+  #bar.compact .cb.primary { min-width: 88px; }
+  #bar.compact .dot { width: 31px; height: 31px; font-size: 13px; }
+  #bar.compact .dot.bonus { width: 35px; }
+  #bar.compact .dot.free { width: 42px; font-size: 12px; }
+  #bar.compact #stepTxt { font-size: 16px; }
+  /* Sehr schmal (z. B. iPad hoch): zwei Zeilen, Etappenpunkte in der zweiten */
+  #bar.stack { flex-wrap: wrap; justify-content: center; row-gap: 10px; }
+  #bar.stack .grp.right { width: 100%; justify-content: center; }
 
   /* ---------- Bedienfeld (echte Pixel, nicht skaliert) ---------- */
   #bar {
@@ -88,6 +126,7 @@
     padding: 0 10px; pointer-events: none;
   }
   #bar .grp { display: flex; align-items: center; gap: 8px; pointer-events: auto; }
+  #bar.compact .grp { gap: 6px; }
   .cb {
     height: 64px; min-width: 78px; padding: 4px 8px; box-sizing: border-box;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
@@ -95,10 +134,10 @@
     background: #f1f3f5; border: 2px solid #adb5bd; border-radius: 12px; cursor: pointer;
   }
   .cb svg { width: 26px; height: 26px; }
-  .cb:hover { background: #e2e6ea; }
+  @media (hover: hover) { .cb:hover { background: #e2e6ea; } }
   .cb.on { background: #d8e6f7; border-color: #1d5fa8; color: #0f3b6e; }
   .cb.primary { background: #1d3557; border-color: #1d3557; color: #fff; min-width: 104px; }
-  .cb.primary:hover { background: #274b77; }
+  @media (hover: hover) { .cb.primary:hover { background: #274b77; } }
   #stepTxt { font: bold 18px Arial, Helvetica, sans-serif; color: #1b1f23; padding: 0 6px; white-space: nowrap; }
   #dots { display: flex; gap: 5px; align-items: center; }
   .dot {
@@ -114,7 +153,7 @@
     border-radius: 12px; border: 2px solid #adb5bd; background: #f8f9fa; opacity: 0.35; cursor: pointer;
     font: bold 26px Arial, Helvetica, sans-serif; color: #333;
   }
-  #bShow:hover { opacity: 1; }
+  @media (hover: hover) { #bShow:hover { opacity: 1; } }
 
   #menu {
     position: fixed; z-index: 12; width: 360px; box-sizing: border-box;
@@ -129,7 +168,7 @@
     border: 2px solid #dee2e6; border-radius: 10px; background: #f8f9fa; cursor: pointer;
     font: bold 16px Arial, Helvetica, sans-serif; color: #1b1f23; text-align: left;
   }
-  .mi:hover { background: #e9ecef; }
+  @media (hover: hover) { .mi:hover { background: #e9ecef; } }
   .mi .box {
     flex: none; width: 26px; height: 26px; border: 3px solid #495057; border-radius: 6px; box-sizing: border-box;
     display: flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1;
@@ -141,6 +180,7 @@
 </head>
 <body>
 
+<div id="app">
 <div id="stage">
   <canvas id="cv" width="1920" height="1080"></canvas>
 
@@ -179,6 +219,7 @@
       <table>
         <tr><td class="k">Leertaste / →</td><td>weiter (bzw. Vorhersage auflösen, nächster Strich)</td></tr>
         <tr><td class="k">←</td><td>zurück</td></tr>
+        <tr><td class="k">iPad: wischen</td><td>nach links = weiter, nach rechts = zurück</td></tr>
         <tr><td class="k">R / N</td><td>Etappe neu starten / alles auf Anfang</td></tr>
         <tr><td class="k">F / Z / I</td><td>Vollbild / Zeitlupe / Außen- oder Innenansicht</td></tr>
         <tr><td class="k">V</td><td>Vorhersage-Pausen an/aus</td></tr>
@@ -187,10 +228,13 @@
         <tr><td class="k">E / 1–7</td><td>Freies Experimentieren / dort die Aktionen</td></tr>
         <tr><td class="k">B / H</td><td>Bedienfeld aus/ein / diese Hilfe</td></tr>
       </table>
-      <div class="close">H oder Klick schließt die Hilfe.</div>
+      <div class="close">H oder Tippen schließt die Hilfe.</div>
     </div>
   </div>
 </div>
+</div>
+<div id="safeProbe"></div>
+<div id="rotateHint" class="hidden">Tipp: iPad quer halten – dann wird das Bild größer.</div>
 
 <!-- Bedienfeld -->
 <div id="bar">
@@ -206,7 +250,7 @@
     <button class="cb" id="bView" title="Außen- / Innenansicht (I)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="10" cy="10" r="6.5"/><path d="M15 15l6 6"/></svg><span id="bViewTxt">Außen</span></button>
     <button class="cb" id="bFull" title="Vollbild (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>Vollbild</button>
   </div>
-  <div class="grp">
+  <div class="grp right">
     <span id="stepTxt"></span>
     <div id="dots"></div>
   </div>
@@ -834,7 +878,7 @@
       enter: function () {
         setView(prefView, 0);
         freshFreeNail();
-        setCallout(['Wähle oben eine Aktion.', 'Die Aktionen lassen sich beliebig kombinieren.'], 'bottom');
+        setCallout(['Wähle eine Aktion.', 'Die Aktionen lassen sich beliebig kombinieren.'], 'bottom');
       },
       steps: function () { return []; }
     },
@@ -1064,7 +1108,9 @@
     var key = [cur === 10, !!W.action, W.hot, W.cut >= 1].join();
     if (key === freeUIKey) return;
     freeUIKey = key;
+    var fbWasHidden = $('freeBar').classList.contains('hidden');
     $('freeBar').classList.toggle('hidden', cur !== 10);
+    if (fbWasHidden !== (cur !== 10)) layout();
     $('fa3').textContent = W.hot ? 'Abkühlen' : 'Erhitzen';
     $('fa4').textContent = W.cut >= 1 ? 'Zusammenfügen' : 'Teilen';
     for (var i = 0; i < 5; i++) $('fa' + i).classList.toggle('busy', !!W.action);
@@ -1175,13 +1221,24 @@
     }
     W.compass = { on: true, t: 0, x: 960, y: 300, a: -PI / 2, w: 0, alpha: 0 };
   }
+  // Vollbild (Standard-API und Safari-Variante mit webkit-Präfix fürs iPad)
+  var docEl = document.documentElement;
+  var fsRequest = docEl.requestFullscreen || docEl.webkitRequestFullscreen;
+  var fsExit = document.exitFullscreen || document.webkitExitFullscreen;
+  function fsElement() { return document.fullscreenElement || document.webkitFullscreenElement || null; }
+  var isStandalone = (window.navigator.standalone === true) ||
+    (window.matchMedia && window.matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches);
   function toggleFullscreen() {
     try {
-      if (!document.fullscreenElement) {
-        var p = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+      if (!fsElement()) {
+        if (!fsRequest) {
+          flashCallout(['Vollbild auf diesem Gerät', 'Safari: Teilen → „Zum Home-Bildschirm“, dann von dort starten.'], 'bottom', 6);
+          return;
+        }
+        var p = fsRequest.call(docEl);
         if (p && p.catch) p.catch(function () { });
-      } else {
-        var q = document.exitFullscreen && document.exitFullscreen();
+      } else if (fsExit) {
+        var q = fsExit.call(document);
         if (q && q.catch) q.catch(function () { });
       }
     } catch (e) { }
@@ -1192,6 +1249,7 @@
     $('bar').classList.toggle('hidden', barHidden);
     $('bShow').classList.toggle('hidden', !barHidden);
     if (barHidden) $('menu').classList.add('hidden');
+    layout();
   }
   function toggleHelp() { $('help').classList.toggle('hidden'); }
   function toggleMenu() { $('menu').classList.toggle('hidden'); layout(); }
@@ -1307,26 +1365,81 @@
   // ---------- Skalierung ----------
   var cv = $('cv'), ctx = cv.getContext('2d'), stageEl = $('stage');
   var scale = 1, offX = 0, offY = 0;
+  // Bühne einpassen. Ist unter der Bühne genug Platz (z. B. iPad), kommt das Bedienfeld
+  // darunter und verdeckt nichts; sonst (16:9-Beamer) liegt es unten über der Bühne.
   function layout() {
-    var w = window.innerWidth, h = window.innerHeight;
-    scale = Math.min(w / VW, h / VH);
-    offX = (w - VW * scale) / 2; offY = (h - VH * scale) / 2;
+    var w = document.documentElement.clientWidth || window.innerWidth;
+    var h = window.innerHeight;
+    var sb = $('safeProbe').getBoundingClientRect().height || 0;   // Home-Balken (iPad ohne Home-Taste)
+    var bar = $('bar');
+    var sFull = Math.min(w / VW, h / VH);
+    // Bedienfeld an die verfügbare Breite anpassen
+    var barW = w < 1240 ? w : VW * sFull;
+    bar.classList.toggle('compact', w < 1320);
+    bar.classList.toggle('stack', w < 1060);
+    bar.style.width = barW + 'px';
+    bar.style.height = 'auto';
+    var barH = barHidden ? 0 : bar.offsetHeight;
+    var room = h - barH - 16 - sb;
+    var sBelow = Math.min(w / VW, room / VH);
+    var below = !barHidden && sBelow >= sFull * 0.97;
+    scale = below ? sBelow : sFull;
+    offX = (w - VW * scale) / 2;
+    offY = below ? Math.max(0, (room - VH * scale) / 2) : (h - VH * scale) / 2;
+    if (below && h > w) offY = Math.min(offY, 24 + (window.navigator.standalone ? 20 : 0));   // Hochformat: Bühne oben, Bedienung darunter
     stageEl.style.transform = 'translate(' + offX + 'px,' + offY + 'px) scale(' + scale + ')';
     var dpr = window.devicePixelRatio || 1;
     var bw = Math.max(1, Math.round(VW * scale * dpr)), bh = Math.max(1, Math.round(VH * scale * dpr));
     if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
-    var bar = $('bar');
-    bar.style.left = offX + 'px';
-    bar.style.width = (VW * scale) + 'px';
-    bar.style.height = '64px';
-    var bottom = Math.max(0, h - offY - VH * scale) + 8;
-    bar.style.bottom = bottom + 'px';
+    var barLeft = w < 1240 ? 0 : offX;
+    bar.style.left = barLeft + 'px';
+    var barTop = below ? offY + VH * scale + 8 : offY + VH * scale - barH - 8 - (offY + VH * scale >= h - 1 ? sb : 0);
+    bar.style.top = barTop + 'px';
+    bar.style.bottom = 'auto';
     var menu = $('menu');
-    menu.style.left = (offX + 10) + 'px';
-    menu.style.bottom = (bottom + 72) + 'px';
+    menu.style.left = (barLeft + 10) + 'px';
+    menu.style.bottom = Math.max(8, h - barTop + 8) + 'px';
+    $('bShow').style.bottom = (10 + sb) + 'px';
+    // Sehr schmal (Hochformat): Aktionen des freien Experimentierens unter das Bedienfeld
+    var fb = $('freeBar'), outside = below && w < 1060;
+    if (outside && fb.parentNode !== document.body) { document.body.appendChild(fb); fb.classList.add('outside'); }
+    if (!outside && fb.parentNode !== stageEl) { stageEl.appendChild(fb); fb.classList.remove('outside'); }
+    var under = barTop + barH + 14;
+    if (outside) { fb.style.top = under + 'px'; if (!fb.classList.contains('hidden')) under += fb.offsetHeight + 10; }
+    else fb.style.top = '';
+    // Hochformat auf Touch-Geräten: Hinweis zum Drehen unter dem Bedienfeld
+    var hint = $('rotateHint');
+    var showHint = isTouch && h > w && below;
+    hint.classList.toggle('hidden', !showHint);
+    if (showHint) hint.style.top = (under + 10) + 'px';
   }
-  window.addEventListener('resize', layout);
-  document.addEventListener('fullscreenchange', layout);
+  var isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  function relayout() { layout(); setTimeout(layout, 350); }   // iPad meldet neue Maße nach dem Drehen verzögert
+  window.addEventListener('resize', relayout);
+  window.addEventListener('orientationchange', relayout);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', relayout);
+  document.addEventListener('fullscreenchange', relayout);
+  document.addEventListener('webkitfullscreenchange', relayout);
+
+  // ---------- Touch: Wischen auf der Bühne = weiter / zurück ----------
+  (function () {
+    var t0 = null;
+    var app = $('app');
+    app.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1 || (e.target.closest && e.target.closest('button'))) { t0 = null; return; }
+      t0 = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
+    }, { passive: true });
+    app.addEventListener('touchend', function (e) {
+      if (!t0) return;
+      var t = e.changedTouches[0], dx = t.clientX - t0.x, dy = t.clientY - t0.y, dt = Date.now() - t0.t;
+      t0 = null;
+      if (dt < 800 && Math.abs(dx) > 60 && Math.abs(dx) > 2 * Math.abs(dy)) {
+        if (dx < 0) forward(); else prev();
+      }
+    }, { passive: true });
+    // Zwei-Finger-Zoom von Safari unterbinden (die Bühne skaliert selbst)
+    document.addEventListener('gesturestart', function (e) { e.preventDefault(); });
+  })();
 
   /* =====================================================================
      HAUPTSCHLEIFE
@@ -2005,8 +2118,20 @@
      START
      ===================================================================== */
 
+  if (isStandalone) $('bFull').classList.add('hidden');
   layout();
   goto(1);
+
+  // Online (GitHub Pages): Web-App-Manifest und Offline-Speicher für das iPad.
+  // Bei file:// wird nichts davon geladen, die Datei bleibt eigenständig.
+  if (/^https?:$/.test(location.protocol)) {
+    var lm = document.createElement('link');
+    lm.rel = 'manifest'; lm.href = 'manifest.webmanifest';
+    document.head.appendChild(lm);
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () { }); });
+    }
+  }
   requestAnimationFrame(function (t) { last = t; frame(t); });
 
   // Kleine Schnittstelle für automatische Tests (Playwright): Etappe setzen, Zeit vorspulen, Zustand lesen.
