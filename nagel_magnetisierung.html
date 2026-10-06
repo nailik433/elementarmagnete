@@ -1,0 +1,1767 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nagel magnetisieren und entmagnetisieren – Elementarmagnete</title>
+<!--
+  Lehranimation Physik Klasse 7: Magnetisieren und Entmagnetisieren eines Eisennagels
+  im Modell der Elementarmagnete. Eine Datei, keine externen Ressourcen, läuft offline
+  per Doppelklick (file://) in Chrome, Edge und Firefox.
+
+  Aufbau des Codes:
+    1. Konstanten, Hilfsfunktionen
+    2. Weltzustand W (alles, was gezeichnet wird) + Elementarmagnete + Büroklammern
+    3. Etappen (enter = Anfangszustand, steps = Zeitablauf)
+    4. Ablaufsteuerung (Runner), Navigation, Tasten, Bedienfeld
+    5. Zeichnen (Canvas 2D, virtuelle Bühne 1920×1080)
+-->
+<style>
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: #ffffff;
+    font-family: Arial, Helvetica, sans-serif;
+    color: #111;
+    -webkit-user-select: none; user-select: none;
+  }
+  /* Bühne: virtuell 1920×1080, wird per transform auf das Fenster skaliert */
+  #stage {
+    position: absolute; left: 0; top: 0;
+    width: 1920px; height: 1080px;
+    transform-origin: 0 0;
+    background: #ffffff;
+    overflow: hidden;
+  }
+  #cv { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; display: block; }
+
+  /* ---------- Overlays innerhalb der Bühne (skalieren mit) ---------- */
+  .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+  .hidden { display: none !important; }
+  #predict { background: rgba(255,255,255,0.55); }
+  .card {
+    width: 1360px; box-sizing: border-box;
+    background: #ffffff; border: 6px solid #1d3557; border-radius: 28px;
+    padding: 48px 64px 52px; text-align: center;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.18);
+  }
+  .card .tag {
+    display: inline-block; font-size: 38px; font-weight: bold; color: #ffffff;
+    background: #1d3557; border-radius: 40px; padding: 8px 34px; margin-bottom: 30px;
+  }
+  .card .q { font-size: 60px; font-weight: bold; line-height: 1.22; margin-bottom: 26px; }
+  .card .sub { font-size: 38px; color: #333; margin-bottom: 40px; }
+  .bigbtn {
+    font: bold 40px Arial, Helvetica, sans-serif;
+    min-height: 100px; padding: 0 56px; border-radius: 20px;
+    border: 4px solid #1d3557; background: #1d3557; color: #fff; cursor: pointer;
+  }
+  .bigbtn:hover { background: #274b77; }
+  .bigbtn.light { background: #ffffff; color: #1d3557; }
+  .bigbtn.light:hover { background: #eef3fa; }
+
+  #help { background: rgba(255,255,255,0.72); }
+  #help .card { width: 1500px; text-align: left; padding: 40px 60px; }
+  #help h2 { font-size: 56px; margin: 0 0 22px; text-align: center; }
+  #help table { width: 100%; border-collapse: collapse; font-size: 36px; }
+  #help td { padding: 7px 10px; vertical-align: top; }
+  #help td.k { font-weight: bold; white-space: nowrap; width: 330px; }
+  #help .close { text-align: center; margin-top: 22px; font-size: 34px; color: #444; }
+
+  #bonusBtns { position: absolute; left: 0; right: 0; top: 790px; display: flex; justify-content: center; gap: 60px; }
+
+  /* ---------- Bedienfeld (echte Pixel, nicht skaliert) ---------- */
+  #bar {
+    position: fixed; z-index: 10; box-sizing: border-box;
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    padding: 0 10px; pointer-events: none;
+  }
+  #bar .grp { display: flex; align-items: center; gap: 8px; pointer-events: auto; }
+  .cb {
+    height: 64px; min-width: 78px; padding: 4px 8px; box-sizing: border-box;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    font: bold 13px Arial, Helvetica, sans-serif; color: #1b1f23;
+    background: #f1f3f5; border: 2px solid #adb5bd; border-radius: 12px; cursor: pointer;
+  }
+  .cb svg { width: 26px; height: 26px; }
+  .cb:hover { background: #e2e6ea; }
+  .cb.on { background: #d8e6f7; border-color: #1d5fa8; color: #0f3b6e; }
+  .cb.primary { background: #1d3557; border-color: #1d3557; color: #fff; min-width: 104px; }
+  .cb.primary:hover { background: #274b77; }
+  #stepTxt { font: bold 18px Arial, Helvetica, sans-serif; color: #1b1f23; padding: 0 6px; white-space: nowrap; }
+  #dots { display: flex; gap: 5px; align-items: center; }
+  .dot {
+    width: 34px; height: 34px; border-radius: 50%; box-sizing: border-box; padding: 0;
+    border: 2px solid #6c757d; background: #fff; color: #333; cursor: pointer;
+    font: bold 14px Arial, Helvetica, sans-serif;
+  }
+  .dot.bonus { border-radius: 8px; border-style: dashed; width: 38px; }
+  .dot.cur { background: #1d3557; border-color: #1d3557; color: #fff; border-style: solid; }
+  .dot.done { background: #dbe4ee; }
+  #bShow {
+    position: fixed; z-index: 11; left: 10px; bottom: 10px; width: 56px; height: 56px;
+    border-radius: 12px; border: 2px solid #adb5bd; background: #f8f9fa; opacity: 0.35; cursor: pointer;
+    font: bold 26px Arial, Helvetica, sans-serif; color: #333;
+  }
+  #bShow:hover { opacity: 1; }
+
+  #menu {
+    position: fixed; z-index: 12; width: 360px; box-sizing: border-box;
+    background: #ffffff; border: 2px solid #868e96; border-radius: 14px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2); padding: 10px;
+    font: 16px Arial, Helvetica, sans-serif; max-height: calc(100vh - 100px); overflow-y: auto;
+  }
+  #menu h3 { margin: 4px 6px 8px; font-size: 18px; }
+  .mi {
+    width: 100%; min-height: 50px; display: flex; align-items: center; gap: 12px;
+    padding: 6px 10px; box-sizing: border-box; margin: 3px 0;
+    border: 2px solid #dee2e6; border-radius: 10px; background: #f8f9fa; cursor: pointer;
+    font: bold 16px Arial, Helvetica, sans-serif; color: #1b1f23; text-align: left;
+  }
+  .mi:hover { background: #e9ecef; }
+  .mi .box {
+    flex: none; width: 26px; height: 26px; border: 3px solid #495057; border-radius: 6px; box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center; font-size: 18px; line-height: 1;
+  }
+  .mi.on .box { background: #1d5fa8; border-color: #1d5fa8; color: #fff; }
+  .mi .key { margin-left: auto; color: #555; font-weight: normal; }
+  .mi small { display: block; font-weight: normal; color: #555; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="cv" width="1920" height="1080"></canvas>
+
+  <!-- Vorhersage-Karte -->
+  <div id="predict" class="overlay hidden">
+    <div class="card">
+      <div class="tag">Vorhersage</div>
+      <div id="pq" class="q"></div>
+      <div class="sub">Was vermutet ihr? Erst Vermutungen sammeln, dann auflösen.</div>
+      <button id="pbtn" class="bigbtn">Auflösen (Leertaste)</button>
+    </div>
+  </div>
+
+  <!-- Bonus-Schaltflächen auf der Zusammenfassung -->
+  <div id="bonusBtns" class="hidden">
+    <button id="bonus7" class="bigbtn light">Bonus: Magnet teilen (T)</button>
+    <button id="bonus8" class="bigbtn light">Bonus: Umpolen (U)</button>
+  </div>
+
+  <!-- Bedienhilfe -->
+  <div id="help" class="overlay hidden">
+    <div class="card">
+      <h2>Bedienung</h2>
+      <table>
+        <tr><td class="k">Leertaste / →</td><td>weiter (bzw. Vorhersage auflösen, nächster Strich)</td></tr>
+        <tr><td class="k">←</td><td>zurück</td></tr>
+        <tr><td class="k">R / N</td><td>Etappe neu starten / alles auf Anfang</td></tr>
+        <tr><td class="k">F / Z / I</td><td>Vollbild / Zeitlupe / Außen- oder Innenansicht</td></tr>
+        <tr><td class="k">V</td><td>Vorhersage-Pausen an/aus</td></tr>
+        <tr><td class="k">K / L / C</td><td>Kompassprobe / Feldlinien / Klammern im Inneren</td></tr>
+        <tr><td class="k">T / U</td><td>Bonus: Magnet teilen / Bonus: Umpolen</td></tr>
+        <tr><td class="k">B / H</td><td>Bedienfeld aus/ein / diese Hilfe</td></tr>
+      </table>
+      <div class="close">H oder Klick schließt die Hilfe.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Bedienfeld -->
+<div id="bar">
+  <div class="grp">
+    <button class="cb" id="bMenu" title="Einstellungen und Bonus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Menü</button>
+    <button class="cb" id="bHide" title="Bedienfeld ausblenden (B)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path d="M3 3l18 18"/></svg>Ausblenden</button>
+  </div>
+  <div class="grp">
+    <button class="cb" id="bBack" title="Zurück (Pfeil links)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M16 4 6 12l10 8z"/></svg>Zurück</button>
+    <button class="cb primary" id="bNext" title="Weiter (Leertaste / Pfeil rechts)"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 4l10 8-10 8z"/></svg>Weiter</button>
+    <button class="cb" id="bRestart" title="Etappe neu starten (R)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4v5h5"/></svg>Neustart</button>
+    <button class="cb" id="bSlow" title="Zeitlupe (Z)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="13" r="8"/><path d="M12 13V9M9 2h6"/></svg>Zeitlupe</button>
+    <button class="cb" id="bView" title="Außen- / Innenansicht (I)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="10" cy="10" r="6.5"/><path d="M15 15l6 6"/></svg><span id="bViewTxt">Außen</span></button>
+    <button class="cb" id="bFull" title="Vollbild (F)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>Vollbild</button>
+  </div>
+  <div class="grp">
+    <span id="stepTxt"></span>
+    <div id="dots"></div>
+  </div>
+</div>
+<button id="bShow" class="hidden" title="Bedienfeld einblenden (B)">☰</button>
+
+<!-- Menü (Einstellungen, Bonus) -->
+<div id="menu" class="hidden">
+  <h3>Einstellungen</h3>
+  <button class="mi" data-set="predict"><span class="box"></span><span>Vorhersage-Pausen</span><span class="key">V</span></button>
+  <button class="mi" data-set="manual"><span class="box"></span><span>Strich einzeln auslösen<small>Jeden Strich mit der Leertaste starten (ab nächstem Etappenstart)</small></span></button>
+  <button class="mi" data-set="bonds"><span class="box"></span><span>Klammern im Inneren<small>Benachbarte N- und S-Pole heben sich auf</small></span><span class="key">C</span></button>
+  <button class="mi" data-set="field"><span class="box"></span><span>Feldlinien</span><span class="key">L</span></button>
+  <button class="mi" data-set="slow"><span class="box"></span><span>Zeitlupe (40 %)</span><span class="key">Z</span></button>
+  <h3>Aktionen</h3>
+  <button class="mi" data-act="compass"><span>Kompassprobe</span><span class="key">K</span></button>
+  <button class="mi" data-act="bonus7"><span>Bonus: Magnet teilen</span><span class="key">T</span></button>
+  <button class="mi" data-act="bonus8"><span>Bonus: Umpolen</span><span class="key">U</span></button>
+  <button class="mi" data-act="help"><span>Bedienhilfe</span><span class="key">H</span></button>
+  <button class="mi" data-act="reset"><span>Alles auf Anfang</span><span class="key">N</span></button>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* =====================================================================
+     1. KONSTANTEN UND HILFSFUNKTIONEN
+     ===================================================================== */
+
+  var VW = 1920, VH = 1080;
+  var FONT = 'Arial, Helvetica, sans-serif';
+  var PI = Math.PI, TAU = Math.PI * 2;
+
+  var COL = {
+    N: '#D62828',          // Nordpol rot (wie Arbeitsblatt)
+    S: '#2E9E4F',          // Südpol grün (wie Arbeitsblatt)
+    ink: '#111111',
+    outline: '#22272b',
+    bond: '#2f4858',       // Verbindungsklammern
+    accent: '#F4A300',     // Hervorhebung (Ring, freie Pole)
+    field: '#1f5aa6',      // Feldlinien
+    calloutBg: '#fffbea',
+    calloutBd: '#d4a017'
+  };
+
+  // Geometrie der Bühne (virtuelle Pixel)
+  var G = {
+    headL: 180,            // linke Kante des Nagelkopfs
+    bodyL: 215,            // Beginn des Nagelschafts (Raster)
+    bodyR: 1595,           // Ende des Schafts / Beginn der Spitze
+    tipX: 1745,            // Nagelspitze
+    cy: 595,               // Mittellinie des Nagels
+    Hin: 280,              // Schafthöhe in der Innenansicht
+    Hout: 70,              // Schafthöhe in der Außenansicht
+    rows: 4, cols: 16,
+    emW: 62, emH: 31,      // Elementarmagnet (2:1)
+    tableY: 905,           // Tischlinie
+    barL: 180, barW: 60,   // Stabmagnet
+    strokeTipY: 435,       // Höhe der Polspitze beim Streichen (20 px über dem Nagel)
+    strokeX0: 270, strokeX1: 1555
+  };
+  G.colW = (G.bodyR - G.bodyL) / G.cols;
+  G.cutX = G.bodyL + 8 * G.colW;                     // Schnittstelle (Etappe 7)
+  G.strokeCY = G.strokeTipY - G.barL / 2;            // Mittelpunkt des Stabs beim Streichen
+
+  function clamp(v, a, b) { if (a === undefined) { a = 0; b = 1; } return v < a ? a : (v > b ? b : v); }
+  function lerp(a, b, t) { return a + (b - a) * t; }
+  function easeInOut(p) { p = clamp(p); return p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2; }
+  function easeOut(p) { p = clamp(p); return 1 - Math.pow(1 - p, 3); }
+  function easeIn(p) { p = clamp(p); return p * p * p; }
+  function easeSine(p) { p = clamp(p); return 0.5 - 0.5 * Math.cos(PI * p); }
+  function smooth(a, b, v) { var t = clamp((v - a) / (b - a)); return t * t * (3 - 2 * t); }
+  function wrapPi(a) { a = (a + PI) % TAU; if (a < 0) a += TAU; return a - PI; }
+  function rad(d) { return d * PI / 180; }
+  function colX(c) { return G.bodyL + (c + 0.5) * G.colW; }
+
+  // Reproduzierbarer Zufall (jede Etappe sieht bei jedem Start gleich aus)
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      var t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  var rnd = mulberry32(1);
+  function shuffle(arr) {
+    for (var i = arr.length - 1; i > 0; i--) { var j = Math.floor(rnd() * (i + 1)); var t = arr[i]; arr[i] = arr[j]; arr[j] = t; }
+    return arr;
+  }
+
+  /* =====================================================================
+     2. WELTZUSTAND
+     ===================================================================== */
+
+  var S = 0;                      // Simulationsuhr in Sekunden (Zeitlupe verlangsamt sie)
+  var W = {};                     // alles, was gezeichnet wird
+  var prefView = 1;               // bevorzugte Ansicht ab Etappe 3 (1 = innen, 0 = außen)
+
+  var settings = { predict: true, manual: false, bonds: true, field: false, slow: false };
+  try {
+    var saved = JSON.parse(localStorage.getItem('nagelAnimSettings') || '{}');
+    ['predict', 'manual', 'bonds'].forEach(function (k) { if (typeof saved[k] === 'boolean') settings[k] = saved[k]; });
+  } catch (e) { /* localStorage evtl. gesperrt – egal */ }
+  function saveSettings() {
+    try { localStorage.setItem('nagelAnimSettings', JSON.stringify({ predict: settings.predict, manual: settings.manual, bonds: settings.bonds })); } catch (e) { }
+  }
+
+  function resetWorld() {
+    W = {
+      scene: 'nail',
+      view: { v: 1, from: 1, to: 1, t0: 0, dur: 0 },
+      nailDY: 0,
+      joltT: -10,
+      mags: [],
+      mx: 0,                      // mittlere x-Komponente der Nordrichtung (−1 = alle nach links)
+      jit: 4,                     // Zitter-Amplitude in Grad
+      jitPos: 1.4,                // Zitter-Verschiebung in px
+      bar: { vis: 0, x: 0, y: 0, ang: PI, sc: 1, float: false },
+      arcA: 0,
+      strokeDone: null,
+      clips: [],
+      clipAuto: false,
+      attachSince: -1,
+      poleShow: 0,
+      cutPoles: 0,
+      bondStage: false, bondA: 0,
+      fieldA: 0,
+      hammer: { vis: 0, x: 600, rot: 0.45 },
+      impacts: [],
+      thermo: 0, T: 20, flame: 0, glow: 0, curieShown: false,
+      cut: 0, gap: 0,
+      emLabel: 0, hlIndex: -1,
+      co: null, coOv: null, coOvUntil: 0,
+      compass: { on: false, t: 0, x: 960, y: 300, a: -PI / 2, w: 0, alpha: 0 },
+      tick: null
+    };
+  }
+
+  /* ---------- Elementarmagnete ---------- */
+
+  function makeMagnets() {
+    var ms = [], r, c;
+    for (r = 0; r < G.rows; r++) for (c = 0; c < G.cols; c++) {
+      ms.push({
+        r: r, c: c, from: 0, to: 0, t0: 0, dur: 0, jw: 1, jwT: 1,
+        p1: rnd() * TAU, p2: rnd() * TAU, p3: rnd() * TAU, p4: rnd() * TAU,
+        f1: 1.0 + rnd() * 0.8, f2: 1.7 + rnd() * 1.1,
+        rank: rnd(), rank2: rnd(), ra: 0, band: 0, tRel: 0, rel: false
+      });
+    }
+    // Geschichtete Zufallswinkel: wirklich in alle Richtungen, Summe ≈ 0 (unmagnetisch)
+    var n = ms.length, ang = [], i;
+    for (i = 0; i < n; i++) ang.push((i + 0.15 + rnd() * 0.7) / n * TAU);
+    shuffle(ang);
+    ms.forEach(function (m, k) { m.ra = ang[k]; });
+    // Gruppen für Hammerschläge und Temperaturen so verteilen, dass jede Teilmenge ausgeglichen ist
+    var sorted = ms.slice().sort(function (a, b) { return a.ra - b.ra; });
+    sorted.forEach(function (m, k) {
+      m.band = k % 5;
+      m.tRel = 550 + ((k * 37) % n) / (n - 1) * 220;  // „Loslass“-Temperatur 550 … 770 °C
+    });
+    return ms;
+  }
+  function angOf(m) {
+    if (m.dur <= 0 || S >= m.t0 + m.dur) return m.to;
+    if (S <= m.t0) return m.from;
+    return lerp(m.from, m.to, easeInOut((S - m.t0) / m.dur));
+  }
+  function setAng(m, a) { m.from = m.to = a; m.dur = 0; }
+  // weiche Drehung auf dem kürzesten Weg
+  function rotTo(m, a, dur, delay) {
+    var c = angOf(m), d = wrapPi(a - c);
+    if (Math.abs(Math.abs(d) - PI) < 0.05) d = (m.rank2 < 0.5 ? -1 : 1) * Math.abs(d);
+    m.from = c; m.to = c + d; m.t0 = S + (delay || 0); m.dur = dur;
+  }
+  function randomMagnets() {
+    W.mags = makeMagnets();
+    W.mags.forEach(function (m) { setAng(m, m.ra); m.jw = m.jwT = 1; });
+  }
+  function alignedMagnets(target) {
+    W.mags = makeMagnets();
+    W.mags.forEach(function (m) { setAng(m, target + (m.rank2 - 0.5) * rad(4)); m.jw = m.jwT = 0.3; });
+  }
+  function meanCos(list) {
+    var s = 0; for (var i = 0; i < list.length; i++) s += Math.cos(angOf(list[i]));
+    return list.length ? s / list.length : 0;
+  }
+
+  /* ---------- Büroklammern ---------- */
+
+  var CLIP_DEF = [
+    // id, Ruheposition auf dem Tisch, Schwelle (fällt ab, wenn Ordnung darunter), Verzögerung beim Anspringen
+    { id: 'A_L', home: 140, thr: 0.30, delay: 0.00 },
+    { id: 'B_L', home: 245, thr: 0.90, delay: 0.50 },
+    { id: 'I_L', home: 350, thr: 0.68, delay: 0.20 },
+    { id: 'I_R', home: 1570, thr: 0.50, delay: 0.30 },
+    { id: 'B_R', home: 1675, thr: 0.70, delay: 0.60 },
+    { id: 'A_R', home: 1780, thr: 0.12, delay: 0.10 }
+  ];
+  var CLIP_REST_Y = G.tableY - 17;
+
+  function makeClips(slotMap) {
+    W.clips = CLIP_DEF.map(function (d) {
+      return {
+        id: d.id, home: d.home, thr: d.thr, delay: d.delay,
+        slot: (slotMap && slotMap[d.id]) || d.id,
+        state: 'rest', x: d.home, y: CLIP_REST_Y, a: 0,
+        vx: 0, vy: 0, fy: 0, fa: 0, j: null
+      };
+    });
+  }
+  function clipById(id) { for (var i = 0; i < W.clips.length; i++) if (W.clips[i].id === id) return W.clips[i]; return null; }
+
+  // Wo hängt eine Klammer? (null = Platz gerade nicht verfügbar)
+  function slotPos(cl, g) {
+    var segs = segments();
+    var lx = colX(0) + segs[0].dx, rx = colX(15) + segs[segs.length - 1].dx;
+    var sw = 0.035 * Math.sin(S * 1.6 + cl.home);
+    var by = g.bot - 4;
+    function hang(ax, ay, a) { return { x: ax + Math.cos(a) * 42, y: ay + Math.sin(a) * 42, a: a }; }
+    switch (cl.slot) {
+      case 'A_L': return hang(lx, by, PI / 2 + sw);
+      case 'A_R': return hang(rx, by, PI / 2 + sw);
+      case 'I_L': return hang(lx + 112, by, PI / 2 + 0.3 + sw);
+      case 'I_R': return hang(rx - 112, by, PI / 2 - 0.3 + sw);
+      case 'B_L': case 'B_R': {
+        var A = clipById(cl.slot === 'B_L' ? 'A_L' : 'A_R');
+        if (!A || A.state !== 'hang') return null;
+        var ex = A.x + Math.cos(A.a) * 40, ey = A.y + Math.sin(A.a) * 40;
+        return hang(ex, ey - 6, PI / 2 + sw * 1.4);
+      }
+      case 'CUT_L':
+        if (W.cut < 1 || W.gap < 40 || segs.length < 2) return null;
+        return hang(colX(7) + segs[0].dx, by, PI / 2 - 0.18 + sw);
+      case 'CUT_R':
+        if (W.cut < 1 || W.gap < 40 || segs.length < 2) return null;
+        return hang(colX(8) + segs[1].dx, by, PI / 2 + 0.18 + sw);
+    }
+    return null;
+  }
+  function clipsHang(ids, g) {
+    ids.forEach(function (id) {
+      var cl = clipById(id), p = slotPos(cl, g);
+      if (p) { cl.state = 'hang'; cl.x = p.x; cl.y = p.y; cl.a = p.a; }
+    });
+  }
+  function jumpClip(cl) {
+    cl.state = 'jump';
+    cl.j = { t0: S, fx: cl.x, fy: cl.y, fa: cl.a };
+  }
+  function dropClip(cl) {
+    if (cl.state !== 'hang' && cl.state !== 'jump') return;
+    cl.state = 'fall';
+    cl.fy = cl.y; cl.fa = cl.a; cl.vy = 0;
+    var t = Math.sqrt(2 * Math.max(10, CLIP_REST_Y - cl.y) / 2600);
+    cl.vx = (cl.home - cl.x) / t;
+    // eine angehängte Klammer fällt mit
+    if (cl.id === 'A_L') dropClip(clipById('B_L'));
+    if (cl.id === 'A_R') dropClip(clipById('B_R'));
+  }
+  function updateClips(dt, g) {
+    var ord = Math.abs(W.mx), i, cl;
+    if (W.clipAuto && W.scene === 'nail') {
+      for (i = 0; i < W.clips.length; i++) {
+        cl = W.clips[i];
+        if ((cl.state === 'hang' || cl.state === 'jump') && ord < cl.thr) dropClip(cl);
+      }
+      if (ord >= 0.92) {
+        if (W.attachSince < 0) W.attachSince = S;
+        for (i = 0; i < W.clips.length; i++) {
+          cl = W.clips[i];
+          if (cl.state === 'rest' && S - W.attachSince >= cl.delay && slotPos(cl, g)) jumpClip(cl);
+        }
+      } else W.attachSince = -1;
+    }
+    for (i = 0; i < W.clips.length; i++) {
+      cl = W.clips[i];
+      if (cl.state === 'jump' || cl.state === 'hang') {
+        var p = slotPos(cl, g);
+        if (!p) { dropClip(cl); continue; }
+        if (cl.state === 'jump') {
+          var q = (S - cl.j.t0) / 0.45;
+          if (q >= 1) { cl.state = 'hang'; q = 1; }
+          var e = easeOut(q);
+          cl.x = lerp(cl.j.fx, p.x, e);
+          cl.y = lerp(cl.j.fy, p.y, e) - Math.sin(PI * q) * 18;
+          cl.a = lerp(cl.j.fa, p.a, e);
+        } else { cl.x = p.x; cl.y = p.y; cl.a = p.a; }
+      } else if (cl.state === 'fall') {
+        cl.vy += 2600 * dt;
+        cl.x += cl.vx * dt; cl.y += cl.vy * dt;
+        cl.a = lerp(cl.fa, 0, clamp((cl.y - cl.fy) / Math.max(1, CLIP_REST_Y - cl.fy)));
+        if (cl.y >= CLIP_REST_Y) { cl.y = CLIP_REST_Y; cl.a = 0; cl.state = 'rest'; cl.x = cl.home; }
+      }
+    }
+  }
+
+  /* ---------- Ansicht (außen/innen) und Nagelgeometrie ---------- */
+
+  function setView(target, dur) {
+    var v = W.view.v;
+    W.view = { v: dur > 0 ? v : target, from: v, to: target, t0: S, dur: dur };
+    updateUI();
+  }
+  function geom() {
+    var z = easeInOut(W.view.v);
+    var H = lerp(G.Hout, G.Hin, z);
+    var jt = S - W.joltT;
+    var jy = (jt >= 0 && jt < 0.7) ? 8 * Math.exp(-8 * jt) * Math.sin(30 * jt) : 0;
+    var cy = G.cy + W.nailDY + jy;
+    return {
+      z: z, H: H, cy: cy, top: cy - H / 2, bot: cy + H / 2,
+      headH: lerp(150, 350, z), headW: 35,
+      ext: 1 - smooth(0.15, 0.65, z),     // Deckkraft Außenansicht
+      int: smooth(0.35, 0.85, z),          // Deckkraft Innenansicht
+      sc: H / G.Hin
+    };
+  }
+  // Nagelstücke (nach dem Durchschneiden zwei)
+  function segments() {
+    if (W.cut >= 1) return [{ c0: 0, c1: 7, dx: -W.gap }, { c0: 8, c1: 15, dx: W.gap }];
+    return [{ c0: 0, c1: 15, dx: 0 }];
+  }
+  function magPos(m, g) {
+    var s1 = Math.sin(TAU * m.f1 * S + m.p3), s2 = Math.sin(TAU * m.f2 * S * 0.8 + m.p4);
+    var jp = W.jitPos * m.jw * g.sc;
+    return { x: colX(m.c) + jp * s1, y: g.top + (m.r + 0.5) * g.H / G.rows + jp * s2 };
+  }
+  function magDrawAngle(m) {
+    var w = 0.62 * Math.sin(TAU * m.f1 * S + m.p1) + 0.38 * Math.sin(TAU * m.f2 * S + m.p2);
+    return angOf(m) + rad(W.jit) * m.jw * w;
+  }
+
+  /* ---------- Hinweiskasten ---------- */
+
+  function setCallout(lines, pos, opt) {
+    opt = opt || {};
+    W.co = { lines: lines, pos: pos || 'bottom', head: opt.head !== false, a: 0 };
+  }
+  function flashCallout(lines, pos, secs) {
+    W.coOv = { lines: lines, pos: pos || 'bottom', head: true, a: 0 };
+    W.coOvUntil = S + secs;
+  }
+
+  /* =====================================================================
+     3. ETAPPEN
+     ===================================================================== */
+
+  var HINT1 = 'Immer in dieselbe Richtung streichen,';
+  var HINT2 = 'Magnet zurück durch die Luft.';
+
+  // Drei Striche mit dem Stabmagneten (Etappe 3: Nordpol, Ziel N links; Etappe 8: Südpol, Ziel N rechts)
+  function strokeSteps(target) {
+    var fr = [0.65, 0.90, 1.0];
+    var X0 = G.strokeX0, X1 = G.strokeX1, cyS = G.strokeCY, LIFT = 60;
+    var steps = [];
+    function alignMagnet(m, k) {
+      if (m.rank < fr[k]) {
+        var dev = 0;
+        if (k === 2 && m.rank > 0.94) dev = (m.rank2 - 0.5) * 0.4;   // wenige weichen leicht ab
+        else if (k < 2) dev = (m.rank2 - 0.5) * 0.12;
+        rotTo(m, target + dev, 0.4 + 0.4 * m.rank2);
+        m.jwT = 0.3;
+      } else {
+        // nicht erfasste Magnete drehen sich nur ein Stück in Strichrichtung
+        var c = angOf(m);
+        rotTo(m, c + 0.35 * wrapPi(target - c), 0.5 + 0.3 * m.rank2);
+      }
+    }
+    function influence(k) {
+      for (var c = 0; c < G.cols; c++) {
+        if (!W.strokeDone[c] && W.bar.x >= colX(c) - 15) {
+          W.strokeDone[c] = true;
+          W.mags.forEach(function (m) { if (m.c === c) alignMagnet(m, k); });
+        }
+      }
+    }
+    [0, 1, 2].forEach(function (k) {
+      var label = 'Strich ' + (k + 1) + ' / 3';
+      if (settings.manual) {
+        steps.push({ wait: true, s: function () { setCallout([label, 'Leertaste: Strich starten'], 'bottom'); } });
+      }
+      steps.push({
+        d: 0.6,
+        s: function () { setCallout(k === 0 ? [label] : [label, HINT1, HINT2], 'bottom'); },
+        u: function (p) { W.bar.x = X0; W.bar.y = lerp(cyS - LIFT, cyS, easeInOut(p)); }
+      });
+      steps.push({
+        d: 3.4,
+        s: function () { W.strokeDone = []; for (var c = 0; c < G.cols; c++) W.strokeDone.push(false); },
+        u: function (p) { W.bar.x = lerp(X0, X1, easeSine(p)); influence(k); },
+        e: function () { W.bar.x = X1; influence(k); }
+      });
+      if (k < 2) {
+        steps.push({
+          d: 2.4,
+          s: function () { setCallout([label, HINT1, HINT2], 'bottom'); },
+          u: function (p) {
+            var u = easeInOut(p);
+            W.bar.x = lerp(X1, X0, u);
+            W.bar.y = cyS - (LIFT * u + 65 * Math.sin(PI * u));   // Bogen durch die Luft
+            W.arcA = Math.min(1, p * 5, (1 - p) * 5);
+          },
+          e: function () { W.arcA = 0; }
+        });
+      } else {
+        steps.push({ d: 1.0, u: function (p) { W.bar.y = cyS - 80 * easeOut(p); W.bar.vis = 1 - p; } });
+      }
+    });
+    return steps;
+  }
+
+  var STAGES = {
+    1: {
+      title: 'Wie wird ein Nagel zum Magneten?',
+      text: 'Ein Eisennagel zieht keine Büroklammern an.',
+      enter: function () {
+        setView(0, 0);
+        randomMagnets(); makeClips();
+        W.bar = { vis: 1, x: 1560, y: 330, ang: PI, sc: 1.4, float: true };
+      },
+      steps: function () {
+        // Der Nagel wird zu den Büroklammern abgesenkt – nichts passiert.
+        return [
+          { d: 1.2 },
+          { d: 1.5, u: function (p) { W.nailDY = 190 * easeInOut(p); } },
+          { d: 1.5 },
+          { d: 1.5, u: function (p) { W.nailDY = 190 * (1 - easeInOut(p)); } }
+        ];
+      }
+    },
+
+    2: {
+      title: 'Blick ins Innere',
+      text: 'Im Eisen stecken viele kleine Elementarmagnete. Sie zeigen in alle Richtungen, ihre Wirkungen heben sich auf.',
+      enter: function () {
+        setView(0, 0);
+        randomMagnets(); makeClips();
+        W.hlIndex = 0 * G.cols + 9;
+      },
+      steps: function () {
+        return [
+          { d: 0.8 },
+          { d: 0, s: function () { setView(1, 1.8); } },
+          { d: 2.0 },
+          { d: 0.9, u: function (p) { W.emLabel = easeOut(p); } }
+        ];
+      }
+    },
+
+    3: {
+      title: 'Magnetisieren durch Streichen',
+      text: 'Beim Streichen richten sich die Elementarmagnete aus.',
+      q: 'Wie ändern sich die Elementarmagnete, wenn wir mit dem Nordpol über den Nagel streichen?',
+      enter: function () {
+        setView(prefView, 0);
+        randomMagnets(); makeClips();
+        W.bar = { vis: 0, x: G.strokeX0, y: G.strokeCY - 60, ang: PI / 2, sc: 1, float: false };
+      },
+      steps: function () {
+        var st = [{ d: 0.5, u: function (p) { W.bar.vis = p; } }];
+        st = st.concat(strokeSteps(PI));
+        st.push({ d: 0, s: function () { setCallout(['Strich 3 / 3: fertig!', 'Fast alle Elementarmagnete sind ausgerichtet.'], 'bottom'); } });
+        return st;
+      }
+    },
+
+    4: {
+      title: 'Der Nagel ist magnetisiert',
+      text: 'Alle Elementarmagnete zeigen in dieselbe Richtung. Der Nagel ist ein Magnet mit Nordpol und Südpol.',
+      enter: function () {
+        setView(prefView, 0);
+        alignedMagnets(PI); makeClips();
+      },
+      steps: function () {
+        return [
+          { d: 0.3 },
+          { d: 0.8, u: function (p) { W.poleShow = easeOut(p); } },
+          { d: 0.5 },
+          { d: 0, s: function () { W.clipAuto = true; } },
+          { d: 2.0 },
+          {
+            d: 0, s: function () {
+              W.bondStage = true;
+              setCallout(['Innen heben sich N und S benachbarter', 'Elementarmagnete auf. Nur die Enden wirken.'], 'bottom', { head: false });
+            }
+          }
+        ];
+      }
+    },
+
+    5: {
+      title: 'Entmagnetisieren durch Klopfen',
+      text: 'Erschütterung bringt die Elementarmagnete durcheinander. Der Nagel verliert seinen Magnetismus.',
+      q: 'Was passiert mit dem Magnetismus, wenn wir mit dem Hammer auf den Nagel schlagen?',
+      enter: function () {
+        setView(prefView, 0);
+        alignedMagnets(PI); makeClips();
+        W.mx = meanCos(W.mags);
+        clipsHang(['A_L', 'A_R', 'I_L', 'I_R', 'B_L', 'B_R'], geom());
+        W.poleShow = 1; W.bondStage = true; W.clipAuto = true;
+        W.hammer = { vis: 0, x: 600, rot: 0.45 };
+      },
+      steps: function () {
+        var RAISE = 0.45, xs = [600, 1250, 860, 1420, 1050], st = [];
+        st.push({ d: 0.6, u: function (p) { W.hammer.vis = p; W.hammer.rot = RAISE; } });
+        xs.forEach(function (x, k) {
+          var fromX = 0, fromR = 0;
+          st.push({
+            d: k === 0 ? 0.01 : 0.5,
+            s: function () { fromX = W.hammer.x; fromR = W.hammer.rot; },
+            u: function (p) { W.hammer.x = lerp(fromX, x, easeInOut(p)); W.hammer.rot = lerp(fromR, RAISE, easeInOut(p)); }
+          });
+          st.push({ d: 0.25 });
+          st.push({
+            d: 0.14,
+            s: function () { setCallout(['Schlag ' + (k + 1) + ' / 5'], 'bottom'); },
+            u: function (p) { W.hammer.rot = RAISE * (1 - easeIn(p)); },
+            e: function () { hammerImpact(k, x); }
+          });
+          st.push({ d: 0.4, u: function (p) { W.hammer.rot = RAISE * 0.7 * easeOut(p); } });
+          st.push({ d: 0.35 });
+        });
+        st.push({ d: 0.7, u: function (p) { W.hammer.vis = 1 - p; } });
+        st.push({ d: 0, s: function () { setCallout(['Die Elementarmagnete sind wieder ungeordnet.', 'Der Nagel ist nicht mehr magnetisch.'], 'bottom'); } });
+        return st;
+      }
+    },
+
+    6: {
+      title: 'Entmagnetisieren durch Erhitzen',
+      text: 'Hitze bringt die Elementarmagnete durcheinander. Nach dem Abkühlen bleibt der Nagel unmagnetisch.',
+      q: 'Was passiert, wenn wir den Nagel stark erhitzen?',
+      enter: function () {
+        setView(prefView, 0);
+        alignedMagnets(PI); makeClips();
+        W.mx = meanCos(W.mags);
+        clipsHang(['A_L', 'A_R', 'I_L', 'I_R', 'B_L', 'B_R'], geom());
+        W.poleShow = 1; W.bondStage = true; W.clipAuto = true;
+        W.thermo = 1; W.T = 20;
+        W.tick = heatTick;
+      },
+      steps: function () {
+        return [
+          { d: 0.4 },
+          { d: 0.9, s: function () { setCallout(['Der Nagel wird erhitzt …'], 'top'); }, u: function (p) { W.flame = easeOut(p); } },
+          { d: 10, u: function (p) { W.T = lerp(20, 800, easeSine(p)); } },
+          { d: 1.6 },
+          { d: 0.9, s: function () { setCallout(['Flamme aus: Der Nagel kühlt ab.'], 'top'); }, u: function (p) { W.flame = 1 - easeIn(p); } },
+          { d: 6, u: function (p) { W.T = lerp(800, 20, easeOut(p)); } },
+          { d: 0, s: function () { setCallout(['Abgekühlt: Die Elementarmagnete bleiben ungeordnet.', 'Der Nagel bleibt unmagnetisch.'], 'top'); } }
+        ];
+      }
+    },
+
+    7: {
+      title: 'Bonus: Magnet teilen',
+      text: 'Es gibt keinen einzelnen Nordpol ohne Südpol.',
+      q: 'Was entsteht, wenn wir den Magneten in der Mitte durchschneiden?',
+      bonus: true,
+      enter: function () {
+        setView(prefView, 0);
+        alignedMagnets(PI); makeClips({ I_L: 'CUT_L', I_R: 'CUT_R' });
+        W.mx = meanCos(W.mags);
+        clipsHang(['A_L', 'A_R', 'B_L', 'B_R'], geom());
+        W.poleShow = 1; W.bondStage = true; W.clipAuto = true;
+      },
+      steps: function () {
+        return [
+          { d: 0.5 },
+          { d: 1.0, s: function () { setCallout(['Schnitt in der Mitte'], 'top'); }, u: function (p) { W.cut = Math.min(0.999, p); }, e: function () { W.cut = 1; } },
+          { d: 0.3 },
+          { d: 1.4, u: function (p) { W.gap = 60 * easeInOut(p); W.cutPoles = easeOut(clamp(p * 2)); } },
+          { d: 0.6 },
+          { d: 0, s: function () { setCallout(['Zwei vollständige Magnete mit je N und S.', 'Die Elementarmagnete selbst ändern sich nicht.'], 'top'); } }
+        ];
+      }
+    },
+
+    8: {
+      title: 'Bonus: Umpolen',
+      text: 'Streicht man mit dem anderen Pol, ändert sich die Polung.',
+      bonus: true,
+      enter: function () {
+        setView(prefView, 0);
+        alignedMagnets(PI); makeClips();
+        W.mx = meanCos(W.mags);
+        clipsHang(['A_L', 'A_R', 'I_L', 'I_R', 'B_L', 'B_R'], geom());
+        W.poleShow = 1; W.bondStage = true; W.clipAuto = true;
+        W.bar = { vis: 0, x: G.strokeX0, y: G.strokeCY - 60, ang: PI / 2, sc: 1, float: false };
+      },
+      steps: function () {
+        var st = [
+          { d: 0.5, u: function (p) { W.bar.vis = p; W.poleShow = 1 - p; } },
+          { d: 1.4, s: function () { setCallout(['Stabmagnet umdrehen: Südpol nach unten'], 'bottom'); }, u: function (p) { W.bar.ang = PI / 2 + PI * easeInOut(p); } },
+          { d: 0.4 }
+        ];
+        st = st.concat(strokeSteps(0));
+        st.push({ d: 0.8, s: function () { setCallout(['Jetzt: links Südpol, rechts Nordpol.'], 'bottom'); }, u: function (p) { W.poleShow = easeOut(p); } });
+        return st;
+      }
+    },
+
+    9: {
+      title: 'Zusammenfassung',
+      text: 'Das schreiben wir ins Heft.',
+      enter: function () {
+        W.scene = 'summary';
+        W.mags = makeMagnets();
+        W.mags.forEach(function (m) { setAng(m, m.ra); });
+      },
+      steps: function () { return []; }
+    }
+  };
+
+  // Hammerschlag k: ein Fünftel der Magnete (ausgeglichen gewählt) wird in neue Richtungen gestoßen
+  function hammerImpact(k, x) {
+    W.joltT = S;
+    W.impacts.push({ x: x, t0: S });
+    W.mags.forEach(function (m) {
+      if (k === 4 || m.band === k) {
+        rotTo(m, m.ra, 0.35 + 0.35 * m.rank2);
+        m.jwT = 1;
+      } else if (m.band < k && m.rank2 < 0.4) {
+        rotTo(m, m.ra + (rnd() - 0.5) * 1.2, 0.4);   // schon gestörte Magnete werden weiter durchgeschüttelt
+      }
+    });
+  }
+
+  // Erhitzen: Zittern wächst mit der Temperatur, ab tRel verliert jeder Magnet seine Ausrichtung
+  function heatTick() {
+    var T = W.T;
+    W.jit = 4 + 34 * Math.pow(clamp((T - 20) / 750), 1.6);
+    W.jitPos = 1.4 + 2.6 * clamp((T - 20) / 750);
+    W.glow = smooth(420, 770, T);
+    W.mags.forEach(function (m) {
+      if (!m.rel && T >= m.tRel) { m.rel = true; rotTo(m, m.ra, 0.8); m.jwT = 1; }
+    });
+    if (!W.curieShown && T >= 770) {
+      W.curieShown = true;
+      setCallout(['Curie-Temperatur von Eisen: 770 °C', 'Die Elementarmagnete sind völlig ungeordnet.'], 'top');
+    }
+  }
+
+  /* =====================================================================
+     4. ABLAUFSTEUERUNG, NAVIGATION, BEDIENUNG
+     ===================================================================== */
+
+  // Runner arbeitet eine Liste von Schritten ab:
+  //   { d: Dauer, s: Start(), u: Update(p, t), e: Ende() }  oder  { wait: true } (wartet auf Leertaste)
+  function Runner(steps) { this.steps = steps; this.i = 0; this.t = 0; this.started = false; this.trigger = false; }
+  Runner.prototype.waiting = function () {
+    var st = this.steps[this.i];
+    return !!(st && st.wait && this.started);
+  };
+  // Steht noch ein Warte-Schritt aus? (Dann löst die Leertaste ihn aus, statt die Etappe zu verlassen.)
+  Runner.prototype.pendingWait = function () {
+    for (var i = this.i; i < this.steps.length; i++) if (this.steps[i].wait) return true;
+    return false;
+  };
+  Runner.prototype.update = function (dt) {
+    var rem = dt;
+    while (this.i < this.steps.length) {
+      var st = this.steps[this.i];
+      if (!this.started) { this.started = true; this.t = 0; if (st.s) st.s(); }
+      if (st.wait) {
+        if (this.trigger) { this.trigger = false; if (st.e) st.e(); this.i++; this.started = false; continue; }
+        break;
+      }
+      var need = st.d - this.t;
+      if (rem >= need) {
+        this.t = st.d;
+        if (st.u) st.u(1, st.d);
+        if (st.e) st.e();
+        rem -= Math.max(0, need);
+        this.i++; this.started = false;
+      } else {
+        this.t += rem;
+        if (st.u) st.u(this.t / st.d, this.t);
+        break;
+      }
+    }
+  };
+
+  var MAIN = [1, 2, 3, 4, 5, 6, 9];   // Hauptablauf (7 und 8 sind Bonus)
+  var cur = 1, run = null, predicting = false, visited = {};
+
+  function goto(id) {
+    cur = id;
+    visited[id] = true;
+    resetWorld();
+    rnd = mulberry32(id * 7919 + 13);
+    var st = STAGES[id];
+    st.enter();
+    W.mx = meanCos(W.mags);
+    run = new Runner(st.steps());
+    predicting = !!(st.q && settings.predict);
+    $('pq').textContent = st.q || '';
+    $('predict').classList.toggle('hidden', !predicting);
+    $('bonusBtns').classList.toggle('hidden', id !== 9);
+    headerCache = null;
+    updateUI();
+  }
+  function resolvePrediction() {
+    predicting = false;
+    $('predict').classList.add('hidden');
+  }
+  function next() {
+    if (cur === 7) return goto(8);
+    if (cur === 8) return goto(9);
+    var i = MAIN.indexOf(cur);
+    if (i >= 0 && i < MAIN.length - 1) goto(MAIN[i + 1]);
+  }
+  function prev() {
+    if (cur === 7) return goto(9);
+    if (cur === 8) return goto(7);
+    var i = MAIN.indexOf(cur);
+    if (i > 0) goto(MAIN[i - 1]);
+  }
+  function forward() {
+    if (predicting) resolvePrediction();
+    else if (run && run.pendingWait()) run.trigger = true;   // nächster Strich (wird ggf. vorgemerkt)
+    else next();
+  }
+  function toggleView() {
+    if (W.scene !== 'nail') return;
+    prefView = W.view.to > 0.5 ? 0 : 1;
+    setView(prefView, 0.9);
+    updateUI();
+  }
+  function toggleSetting(k) {
+    settings[k] = !settings[k];
+    if (k === 'predict' && !settings.predict && predicting) resolvePrediction();
+    saveSettings();
+    updateUI();
+  }
+  function startCompass() {
+    if (W.scene !== 'nail') return;
+    if (W.compass.on) { W.compass.on = false; return; }
+    if (Math.abs(W.mx) < 0.5) {
+      flashCallout(['Kompassprobe', 'Dafür muss der Nagel magnetisiert sein.'], 'bottom', 3);
+      return;
+    }
+    W.compass = { on: true, t: 0, x: 960, y: 300, a: -PI / 2, w: 0, alpha: 0 };
+  }
+  function toggleFullscreen() {
+    try {
+      if (!document.fullscreenElement) {
+        var p = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+        if (p && p.catch) p.catch(function () { });
+      } else {
+        var q = document.exitFullscreen && document.exitFullscreen();
+        if (q && q.catch) q.catch(function () { });
+      }
+    } catch (e) { }
+  }
+  var barHidden = false;
+  function toggleBar() {
+    barHidden = !barHidden;
+    $('bar').classList.toggle('hidden', barHidden);
+    $('bShow').classList.toggle('hidden', !barHidden);
+    if (barHidden) $('menu').classList.add('hidden');
+  }
+  function toggleHelp() { $('help').classList.toggle('hidden'); }
+  function toggleMenu() { $('menu').classList.toggle('hidden'); layout(); }
+  function resetAll() { prefView = 1; settings.slow = false; settings.field = false; goto(1); }
+
+  function $(id) { return document.getElementById(id); }
+
+  // ---------- Tastatur ----------
+  window.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    var k = e.key;
+    if (k === ' ' || k === 'Spacebar' || k === 'ArrowRight' || k === 'PageDown') {
+      e.preventDefault(); if (!e.repeat) forward(); return;
+    }
+    if (k === 'ArrowLeft' || k === 'PageUp') { e.preventDefault(); if (!e.repeat) prev(); return; }
+    if (e.repeat) return;
+    switch (k.toLowerCase()) {
+      case 'r': goto(cur); break;
+      case 'n': resetAll(); break;
+      case 'f': toggleFullscreen(); break;
+      case 'z': toggleSetting('slow'); break;
+      case 'v': toggleSetting('predict'); break;
+      case 'i': toggleView(); break;
+      case 'k': startCompass(); break;
+      case 'l': toggleSetting('field'); break;
+      case 'c': toggleSetting('bonds'); break;
+      case 'h': toggleHelp(); break;
+      case 'b': toggleBar(); break;
+      case 't': goto(7); break;
+      case 'u': goto(8); break;
+      case 'escape': $('menu').classList.add('hidden'); $('help').classList.add('hidden'); break;
+    }
+  });
+
+  // ---------- Schaltflächen ----------
+  function onClick(id, fn) {
+    $(id).addEventListener('click', function (e) { fn(); e.currentTarget.blur(); });
+  }
+  onClick('bNext', forward);
+  onClick('bBack', prev);
+  onClick('bRestart', function () { goto(cur); });
+  onClick('bSlow', function () { toggleSetting('slow'); });
+  onClick('bView', toggleView);
+  onClick('bFull', toggleFullscreen);
+  onClick('bMenu', toggleMenu);
+  onClick('bHide', toggleBar);
+  onClick('bShow', toggleBar);
+  onClick('pbtn', resolvePrediction);
+  onClick('bonus7', function () { goto(7); });
+  onClick('bonus8', function () { goto(8); });
+  $('help').addEventListener('click', toggleHelp);
+  Array.prototype.forEach.call(document.querySelectorAll('#menu .mi'), function (b) {
+    b.addEventListener('click', function () {
+      var s = b.getAttribute('data-set'), a = b.getAttribute('data-act');
+      if (s) toggleSetting(s);
+      if (a === 'compass') { $('menu').classList.add('hidden'); startCompass(); }
+      if (a === 'bonus7') { $('menu').classList.add('hidden'); goto(7); }
+      if (a === 'bonus8') { $('menu').classList.add('hidden'); goto(8); }
+      if (a === 'help') { $('menu').classList.add('hidden'); toggleHelp(); }
+      if (a === 'reset') { $('menu').classList.add('hidden'); resetAll(); }
+      b.blur();
+    });
+  });
+  // Etappenpunkte
+  (function buildDots() {
+    var d = $('dots');
+    MAIN.forEach(function (id, i) {
+      var b = document.createElement('button');
+      b.className = 'dot'; b.textContent = String(i + 1); b.setAttribute('data-id', id);
+      b.title = 'Etappe ' + (i + 1) + ': ' + STAGES[id].title;
+      d.appendChild(b);
+    });
+    [7, 8].forEach(function (id, i) {
+      var b = document.createElement('button');
+      b.className = 'dot bonus'; b.textContent = 'B' + (i + 1); b.setAttribute('data-id', id);
+      b.title = STAGES[id].title;
+      d.appendChild(b);
+    });
+    Array.prototype.forEach.call(d.children, function (b) {
+      b.addEventListener('click', function () { goto(+b.getAttribute('data-id')); b.blur(); });
+    });
+  })();
+
+  function updateUI() {
+    var i = MAIN.indexOf(cur);
+    $('stepTxt').textContent = i >= 0 ? (i + 1) + ' / ' + MAIN.length : 'Bonus ' + (cur - 6);
+    Array.prototype.forEach.call($('dots').children, function (b) {
+      var id = +b.getAttribute('data-id');
+      b.classList.toggle('cur', id === cur);
+      b.classList.toggle('done', id !== cur && !!visited[id]);
+    });
+    $('bSlow').classList.toggle('on', settings.slow);
+    $('bViewTxt').textContent = (W.view && W.view.to > 0.5) ? 'Außen' : 'Innen';
+    $('bView').title = (W.view && W.view.to > 0.5) ? 'Zur Außenansicht (I)' : 'Blick ins Innere (I)';
+    Array.prototype.forEach.call(document.querySelectorAll('#menu .mi[data-set]'), function (b) {
+      var on = !!settings[b.getAttribute('data-set')];
+      b.classList.toggle('on', on);
+      b.querySelector('.box').textContent = on ? '✓' : '';
+    });
+  }
+
+  // ---------- Skalierung ----------
+  var cv = $('cv'), ctx = cv.getContext('2d'), stageEl = $('stage');
+  var scale = 1, offX = 0, offY = 0;
+  function layout() {
+    var w = window.innerWidth, h = window.innerHeight;
+    scale = Math.min(w / VW, h / VH);
+    offX = (w - VW * scale) / 2; offY = (h - VH * scale) / 2;
+    stageEl.style.transform = 'translate(' + offX + 'px,' + offY + 'px) scale(' + scale + ')';
+    var dpr = window.devicePixelRatio || 1;
+    var bw = Math.max(1, Math.round(VW * scale * dpr)), bh = Math.max(1, Math.round(VH * scale * dpr));
+    if (cv.width !== bw || cv.height !== bh) { cv.width = bw; cv.height = bh; }
+    var bar = $('bar');
+    bar.style.left = offX + 'px';
+    bar.style.width = (VW * scale) + 'px';
+    bar.style.height = '64px';
+    var bottom = Math.max(0, h - offY - VH * scale) + 8;
+    bar.style.bottom = bottom + 'px';
+    var menu = $('menu');
+    menu.style.left = (offX + 10) + 'px';
+    menu.style.bottom = (bottom + 72) + 'px';
+  }
+  window.addEventListener('resize', layout);
+  document.addEventListener('fullscreenchange', layout);
+
+  /* =====================================================================
+     HAUPTSCHLEIFE
+     ===================================================================== */
+
+  function update(dt) {
+    S += dt;
+    if (!predicting && run) run.update(dt);
+    W.mx = meanCos(W.mags);
+    var v = W.view;
+    v.v = v.dur > 0 ? lerp(v.from, v.to, clamp((S - v.t0) / v.dur)) : v.to;
+    var k = Math.min(1, dt * 2.5);
+    for (var i = 0; i < W.mags.length; i++) W.mags[i].jw += (W.mags[i].jwT - W.mags[i].jw) * k;
+    if (W.tick) W.tick(dt);
+    if (W.bar.float) W.bar.y = 330 + 8 * Math.sin(S * 1.2);
+    var f = Math.min(1, dt * 3);
+    W.bondA += (((W.bondStage && settings.bonds) ? 1 : 0) - W.bondA) * f;
+    W.fieldA += ((settings.field ? 1 : 0) - W.fieldA) * f;
+    if (W.co) W.co.a = Math.min(1, W.co.a + dt * 3);
+    if (W.coOv) { W.coOv.a = Math.min(1, W.coOv.a + dt * 3); if (S > W.coOvUntil) W.coOv = null; }
+    W.impacts = W.impacts.filter(function (im) { return S - im.t0 < 0.5; });
+    var g = geom();
+    updateClips(dt, g);
+    updateCompass(dt, g);
+  }
+
+  // Kompassprobe: Kompass fährt an das linke, dann an das rechte Nagelende
+  function updateCompass(dt, g) {
+    var c = W.compass;
+    if (!c.on) return;
+    c.t += dt;
+    var t = c.t;
+    var L = { x: 95, y: g.cy }, R = { x: 1830, y: g.cy }, P0 = { x: 960, y: 300 };
+    function quad(a, ctl, b, p) {
+      var u = easeInOut(p);
+      return { x: (1 - u) * (1 - u) * a.x + 2 * (1 - u) * u * ctl.x + u * u * b.x, y: (1 - u) * (1 - u) * a.y + 2 * (1 - u) * u * ctl.y + u * u * b.y };
+    }
+    var pos, near = 0, at = '';
+    if (t < 0.5) { pos = P0; c.alpha = t / 0.5; }
+    else if (t < 2.3) { pos = quad(P0, { x: 95, y: 300 }, L, (t - 0.5) / 1.8); c.alpha = 1; }
+    else if (t < 5.8) { pos = L; at = 'L'; }
+    else if (t < 7.8) { pos = quad(L, { x: 960, y: 170 }, R, (t - 5.8) / 2.0); }
+    else if (t < 11.3) { pos = R; at = 'R'; }
+    else if (t < 11.9) { pos = R; c.alpha = 1 - (t - 11.3) / 0.6; }
+    else { c.on = false; return; }
+    c.x = pos.x; c.y = pos.y;
+    // Feld außen auf der Achse zeigt in Richtung der Magnetisierung (von N weg, zu S hin)
+    var dEnd = Math.min(Math.hypot(c.x - L.x, c.y - L.y), Math.hypot(c.x - R.x, c.y - R.y));
+    near = 1 - smooth(120, 300, dEnd);
+    var target = (near > 0.5 && Math.abs(W.mx) > 0.2) ? (W.mx < 0 ? PI : 0) : -PI / 2;
+    var err = wrapPi(c.a - target);
+    c.w += (-38 * err - 4.5 * c.w) * dt;
+    c.a += c.w * dt;
+    if (at) {
+      var leftPole = W.mx < 0 ? 'N' : 'S';
+      var pole = at === 'L' ? leftPole : (leftPole === 'N' ? 'S' : 'N');
+      var txt = pole === 'N' ? 'Am Nordpol: Die Nordspitze zeigt weg.' : 'Am Südpol: Die Nordspitze zeigt hin.';
+      W.coOv = { lines: ['Kompassprobe', txt], pos: 'bottom', head: true, a: (W.coOv && W.coOv.lines[1] === txt) ? W.coOv.a : 0 };
+      W.coOvUntil = S + 0.3;
+    }
+  }
+
+  var last = performance.now();
+  function frame(now) {
+    var dt = (now - last) / 1000; last = now;
+    if (!(dt > 0)) dt = 0;
+    if (dt > 0.1) dt = 0.1;
+    stepSim(dt * (settings.slow ? 0.4 : 1));
+    render();
+    requestAnimationFrame(frame);
+  }
+  function stepSim(dt) {
+    while (dt > 1e-9) { var h = Math.min(dt, 1 / 60); update(h); dt -= h; }
+  }
+
+  /* =====================================================================
+     5. ZEICHNEN
+     ===================================================================== */
+
+  function rr(x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function arrowHead(x, y, ang, size) {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - size * Math.cos(ang - 0.45), y - size * Math.sin(ang - 0.45));
+    ctx.lineTo(x - size * Math.cos(ang + 0.45), y - size * Math.sin(ang + 0.45));
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Ein Elementarmagnet (oder Stabmagnet): Nordhälfte zeigt in Richtung ang. Buchstaben bleiben aufrecht.
+  function drawMagnet(x, y, ang, w, h, fontPx, lineW) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(ang);
+    rr(-w / 2, -h / 2, w, h, h * 0.28);
+    ctx.save();
+    ctx.clip();
+    ctx.fillStyle = COL.S; ctx.fillRect(-w / 2 - 1, -h / 2 - 1, w / 2 + 1, h + 2);
+    ctx.fillStyle = COL.N; ctx.fillRect(0, -h / 2 - 1, w / 2 + 1, h + 2);
+    ctx.restore();
+    ctx.lineWidth = lineW; ctx.strokeStyle = COL.outline; ctx.stroke();
+    ctx.restore();
+    if (fontPx >= 9) {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold ' + fontPx + 'px ' + FONT;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      var cx = Math.cos(ang) * w / 4, cy = Math.sin(ang) * w / 4;
+      ctx.fillText('N', x + cx, y + cy + fontPx * 0.04);
+      ctx.fillText('S', x - cx, y - cy + fontPx * 0.04);
+    }
+  }
+
+  // ---------- Nagel ----------
+  function bodyTipPath(g) {
+    ctx.beginPath();
+    ctx.moveTo(G.bodyL, g.top);
+    ctx.lineTo(G.bodyR, g.top);
+    ctx.quadraticCurveTo(G.bodyR + 75, g.top + g.H * 0.12, G.tipX, g.cy);
+    ctx.quadraticCurveTo(G.bodyR + 75, g.bot - g.H * 0.12, G.bodyR, g.bot);
+    ctx.lineTo(G.bodyL, g.bot);
+    ctx.closePath();
+  }
+  function headPath(g) { rr(G.headL, g.cy - g.headH / 2, g.headW + 4, g.headH, 6); }
+
+  function drawNailShape(g) {
+    // Außenansicht: metallgrau, schattiert
+    if (g.ext > 0.01) {
+      ctx.save();
+      ctx.globalAlpha = g.ext;
+      var gr = ctx.createLinearGradient(0, g.top, 0, g.bot);
+      gr.addColorStop(0, '#6f767d'); gr.addColorStop(0.22, '#e6e9ec'); gr.addColorStop(0.5, '#aab0b6'); gr.addColorStop(1, '#565d64');
+      bodyTipPath(g); ctx.fillStyle = gr; ctx.fill();
+      var gh = ctx.createLinearGradient(0, g.cy - g.headH / 2, 0, g.cy + g.headH / 2);
+      gh.addColorStop(0, '#6f767d'); gh.addColorStop(0.25, '#dfe3e6'); gh.addColorStop(0.55, '#9ea4aa'); gh.addColorStop(1, '#50575e');
+      headPath(g); ctx.fillStyle = gh; ctx.fill();
+      if (W.glow > 0.01) {
+        ctx.fillStyle = 'rgba(255,' + Math.round(lerp(40, 120, W.glow)) + ',0,' + (0.6 * W.glow).toFixed(3) + ')';
+        bodyTipPath(g); ctx.fill(); headPath(g); ctx.fill();
+      }
+      ctx.lineWidth = 3; ctx.strokeStyle = COL.outline;
+      bodyTipPath(g); ctx.stroke(); headPath(g); ctx.stroke();
+      ctx.restore();
+    }
+    // Innenansicht (Modell): heller Körper, Kopf und Spitze nur als Umriss
+    if (g.int > 0.01) {
+      ctx.save();
+      ctx.globalAlpha = g.int;
+      bodyTipPath(g); ctx.fillStyle = '#fbfbfc'; ctx.fill();
+      headPath(g); ctx.fill();
+      ctx.fillStyle = '#eef1f4'; ctx.fillRect(G.bodyL, g.top, G.bodyR - G.bodyL, g.H);
+      if (W.glow > 0.01) {
+        ctx.fillStyle = 'rgba(255,' + Math.round(lerp(60, 130, W.glow)) + ',20,' + (0.42 * W.glow).toFixed(3) + ')';
+        bodyTipPath(g); ctx.fill(); headPath(g); ctx.fill();
+      }
+      ctx.lineWidth = 4; ctx.strokeStyle = COL.outline;
+      bodyTipPath(g); ctx.stroke(); headPath(g); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function drawMagnetsOf(seg, g) {
+    if (g.int <= 0.02) return;
+    ctx.save();
+    ctx.globalAlpha = g.int;
+    var w = G.emW * g.sc, h = G.emH * g.sc, fpx = Math.round(22 * g.sc);
+    for (var i = 0; i < W.mags.length; i++) {
+      var m = W.mags[i];
+      if (m.c < seg.c0 || m.c > seg.c1) continue;
+      var p = magPos(m, g);
+      drawMagnet(p.x, p.y, magDrawAngle(m), w, h, fpx, 3);
+    }
+    ctx.restore();
+  }
+
+  // Verbindungsklammern zwischen benachbarten N- und S-Hälften + freie Pole an den Enden
+  function drawBonds(seg, g) {
+    // nur bei (weitgehend) geordnetem Nagel zeigen, sonst wirken zufällig waagerechte Paare irreführend
+    var a0 = g.int * W.bondA * smooth(0.35, 0.75, Math.abs(W.mx));
+    if (a0 <= 0.02) return;
+    var h = G.emH * g.sc, w = G.emW * g.sc;
+    function q(m) { var c = Math.cos(angOf(m)); return { q: smooth(0.9, 0.985, Math.abs(c)), s: c < 0 ? -1 : 1 }; }
+    ctx.save();
+    for (var r = 0; r < G.rows; r++) {
+      var y = g.top + (r + 0.5) * g.H / G.rows;
+      for (var c = seg.c0; c <= seg.c1; c++) {
+        var m = W.mags[r * G.cols + c], qa = q(m);
+        if (c < seg.c1) {
+          var qb = q(W.mags[r * G.cols + c + 1]);
+          var a = qa.q * qb.q * (qa.s === qb.s ? 1 : 0);
+          if (a > 0.02) {
+            ctx.globalAlpha = a0 * a;
+            ctx.lineWidth = 3; ctx.strokeStyle = COL.bond;
+            rr(colX(c) + 3, y - h / 2 - 6, G.colW - 6, h + 12, 10);
+            ctx.stroke();
+          }
+        }
+        // freie Pole an den Enden des Stücks hervorheben
+        var edgeL = (c === seg.c0 && qa.s < 0), edgeR = (c === seg.c1 && qa.s > 0);
+        var edgeL2 = (c === seg.c0 && qa.s > 0), edgeR2 = (c === seg.c1 && qa.s < 0);
+        if ((edgeL || edgeR || edgeL2 || edgeR2) && qa.q > 0.02) {
+          ctx.globalAlpha = a0 * qa.q;
+          ctx.lineWidth = 5; ctx.strokeStyle = COL.accent;
+          var left = (c === seg.c0);
+          var x0 = left ? colX(c) - w / 2 - 7 : colX(c) - 3;
+          rr(x0, y - h / 2 - 7, w / 2 + 10, h + 14, 10);
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+  function drawNail(g) {
+    var segs = segments();
+    segs.forEach(function (seg) {
+      ctx.save();
+      ctx.translate(seg.dx, 0);
+      if (segs.length > 1) {
+        ctx.beginPath();
+        if (seg.c0 === 0) ctx.rect(-200, 0, G.cutX + 200, VH); else ctx.rect(G.cutX, 0, VW, VH);
+        ctx.clip();
+      }
+      drawNailShape(g);
+      drawMagnetsOf(seg, g);
+      drawBonds(seg, g);
+      ctx.restore();
+      // Schnittflächen nach dem Teilen nachzeichnen
+      if (segs.length > 1) {
+        ctx.save();
+        ctx.lineWidth = g.int > 0.5 ? 4 : 3; ctx.strokeStyle = COL.outline;
+        var x = G.cutX + seg.dx;
+        ctx.beginPath(); ctx.moveTo(x, g.top); ctx.lineTo(x, g.bot); ctx.stroke();
+        ctx.restore();
+      }
+    });
+    // Schnittlinie
+    if (W.cut > 0 && W.gap < 30) {
+      ctx.save();
+      ctx.globalAlpha = 1 - W.gap / 30;
+      ctx.setLineDash([16, 10]); ctx.lineWidth = 5; ctx.strokeStyle = '#7a1f5c';
+      var y0 = g.top - 40, y1 = y0 + (g.H + 80) * Math.min(1, W.cut);
+      ctx.beginPath(); ctx.moveTo(G.cutX, y0); ctx.lineTo(G.cutX, y1); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  // ---------- Pol-Marken ----------
+  function poleMark(x, y, pole, alpha) {
+    if (alpha <= 0.01) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.beginPath(); ctx.arc(x, y, 46, 0, TAU);
+    ctx.fillStyle = pole === 'N' ? COL.N : COL.S; ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = COL.outline; ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 58px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(pole, x, y + 3);
+    ctx.restore();
+  }
+  function drawPoles(g) {
+    if (W.poleShow <= 0.01) return;
+    var a = W.poleShow * smooth(0.3, 0.8, Math.abs(W.mx));
+    if (a <= 0.01) return;
+    var segs = segments();
+    var leftPole = W.mx < 0 ? 'N' : 'S', rightPole = leftPole === 'N' ? 'S' : 'N';
+    var y = g.top - 62;
+    segs.forEach(function (seg, i) {
+      var xl = colX(seg.c0) + seg.dx, xr = colX(seg.c1) + seg.dx;
+      var cutL = segs.length > 1 && i === 1, cutR = segs.length > 1 && i === 0;
+      poleMark(xl, y, leftPole, a * (cutL ? W.cutPoles : 1));
+      poleMark(xr, y, rightPole, a * (cutR ? W.cutPoles : 1));
+    });
+    if (segs.length === 1 && W.fieldA < 0.99) {
+      ctx.save();
+      ctx.globalAlpha = a * (1 - W.fieldA);
+      ctx.fillStyle = COL.ink; ctx.font = 'bold 38px ' + FONT; ctx.textBaseline = 'middle';
+      ctx.textAlign = 'left'; ctx.fillText(leftPole === 'N' ? 'Nordpol' : 'Südpol', colX(0) + 60, y + 2);
+      ctx.textAlign = 'right'; ctx.fillText(rightPole === 'N' ? 'Nordpol' : 'Südpol', colX(15) - 60, y + 2);
+      ctx.restore();
+    }
+  }
+
+  // ---------- Feldlinien ----------
+  function drawField(g) {
+    var ord = Math.abs(W.mx);
+    var a = W.fieldA * smooth(0.5, 0.9, ord);
+    if (a <= 0.01) return;
+    var segs = segments();
+    ctx.save();
+    ctx.globalAlpha = a * 0.9;
+    ctx.strokeStyle = COL.field; ctx.fillStyle = COL.field; ctx.lineWidth = 3;
+    segs.forEach(function (seg) {
+      var x1 = (seg.c0 === 0 ? G.headL : G.cutX) + seg.dx, x2 = (seg.c1 === 15 ? G.tipX : G.cutX) + seg.dx;
+      var xN = W.mx < 0 ? x1 : x2, xS = W.mx < 0 ? x2 : x1, dir = xS > xN ? 1 : -1;
+      var nArcs = g.z > 0.5 ? 2 : 3;
+      for (var k = 0; k < nArcs; k++) {
+        var h = (g.H / 2 + 42 + k * 72) / 0.75, d = 50 + 45 * k, off = g.H * (0.1 + 0.1 * k);
+        [-1, 1].forEach(function (sy) {
+          var y0 = g.cy + sy * off, yc = g.cy + sy * h;
+          ctx.beginPath();
+          ctx.moveTo(xN, y0);
+          ctx.bezierCurveTo(xN - dir * d, yc, xS + dir * d, yc, xS, y0);
+          ctx.stroke();
+          var mx = (xN + xS) / 2, my = 0.125 * y0 + 0.375 * yc + 0.375 * yc + 0.125 * y0;
+          arrowHead(mx + dir * 12, my, dir > 0 ? 0 : PI, 18);
+        });
+      }
+      // Achsenlinien: aus N heraus, in S hinein
+      ctx.beginPath(); ctx.moveTo(xN - dir * 8, g.cy); ctx.lineTo(xN - dir * 85, g.cy); ctx.stroke();
+      arrowHead(xN - dir * 95, g.cy, dir > 0 ? PI : 0, 18);
+      ctx.beginPath(); ctx.moveTo(xS + dir * 130, g.cy); ctx.lineTo(xS + dir * 30, g.cy); ctx.stroke();
+      arrowHead(xS + dir * 18, g.cy, dir > 0 ? PI : 0, 18);
+    });
+    ctx.restore();
+  }
+
+  // ---------- Büroklammern ----------
+  function drawClip(cl) {
+    ctx.save();
+    ctx.translate(cl.x, cl.y);
+    ctx.rotate(cl.a);
+    ctx.beginPath();
+    ctx.moveTo(10, 15);
+    ctx.lineTo(-31, 15);
+    ctx.arc(-31, 0, 15, PI / 2, PI * 1.5);
+    ctx.lineTo(31, -15);
+    ctx.arc(31, -4, 11, -PI / 2, PI / 2);
+    ctx.lineTo(-20, 7);
+    ctx.arc(-20, 0, 7, PI / 2, PI * 1.5);
+    ctx.lineTo(20, -7);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.lineWidth = 7.5; ctx.strokeStyle = '#4d545b'; ctx.stroke();
+    ctx.lineWidth = 3.5; ctx.strokeStyle = '#cfd4d8'; ctx.stroke();
+    ctx.restore();
+  }
+
+  // ---------- Stabmagnet und Bogenpfad ----------
+  function drawBar() {
+    var b = W.bar;
+    if (b.vis <= 0.01) return;
+    ctx.save();
+    ctx.globalAlpha = clamp(b.vis);
+    drawMagnet(b.x, b.y, b.ang, G.barL * b.sc, G.barW * b.sc, Math.round(44 * b.sc), 4);
+    ctx.restore();
+  }
+  function drawArcGuide() {
+    if (W.arcA <= 0.01) return;
+    var tipY = G.strokeCY + G.barL / 2;
+    ctx.save();
+    ctx.globalAlpha = W.arcA * 0.85;
+    ctx.setLineDash([14, 12]); ctx.lineWidth = 4; ctx.strokeStyle = '#444'; ctx.fillStyle = '#444';
+    ctx.beginPath();
+    var px = 0, py = 0, lx = 0, ly = 0;
+    for (var i = 0; i <= 60; i++) {
+      var u = i / 60;
+      lx = px; ly = py;
+      px = lerp(G.strokeX1, G.strokeX0, u);
+      py = tipY - (60 * u + 65 * Math.sin(PI * u));
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    arrowHead(px, py, Math.atan2(py - ly, px - lx), 22);
+    ctx.restore();
+  }
+
+  // ---------- Hammer ----------
+  function drawHammer(g) {
+    var hm = W.hammer;
+    if (hm.vis <= 0.01) return;
+    var pivX = hm.x + 330, pivY = g.top - 55;
+    ctx.save();
+    ctx.globalAlpha = clamp(hm.vis);
+    ctx.translate(pivX, pivY);
+    ctx.rotate(hm.rot);
+    // Stiel
+    var gs = ctx.createLinearGradient(0, -13, 0, 13);
+    gs.addColorStop(0, '#c58b4c'); gs.addColorStop(0.5, '#a86b31'); gs.addColorStop(1, '#7a4a1e');
+    rr(-322, -13, 392, 26, 11); ctx.fillStyle = gs; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#3b250f'; ctx.stroke();
+    // Kopf
+    var gk = ctx.createLinearGradient(-366, 0, -294, 0);
+    gk.addColorStop(0, '#3d4247'); gk.addColorStop(0.45, '#8c949b'); gk.addColorStop(1, '#40464c');
+    rr(-366, -55, 72, 110, 7); ctx.fillStyle = gk; ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = COL.outline; ctx.stroke();
+    ctx.restore();
+  }
+  function drawImpacts(g) {
+    W.impacts.forEach(function (im) {
+      var t = (S - im.t0) / 0.45;
+      if (t > 1) return;
+      ctx.save();
+      ctx.globalAlpha = 1 - t;
+      ctx.strokeStyle = '#333'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+      [-1, 1].forEach(function (s) {
+        [[48, -6, 82, -26], [40, -26, 62, -58]].forEach(function (l) {
+          ctx.beginPath();
+          ctx.moveTo(im.x + s * l[0], g.top + l[1]); ctx.lineTo(im.x + s * l[2], g.top + l[3]);
+          ctx.stroke();
+        });
+      });
+      ctx.restore();
+    });
+  }
+
+  // ---------- Brenner, Flamme, Thermometer ----------
+  function drawBurner(g) {
+    if (W.thermo <= 0) return;
+    var cx = 960, tubeTop = 835;
+    ctx.save();
+    // Flamme (hinter dem Nagel)
+    if (W.flame > 0.01) {
+      var f = W.flame, H = (tubeTop - (g.bot - 12)) * f;
+      var sway = 5 * Math.sin(S * 2.0) * f;
+      function drop(wf, hf, col) {
+        var hh = H * hf, t = tubeTop - hh, w = 40 * wf * f;
+        ctx.beginPath();
+        ctx.moveTo(cx + sway * hf, t);
+        ctx.bezierCurveTo(cx + w * 0.25, t + hh * 0.35, cx + w, t + hh * 0.62, cx, tubeTop);
+        ctx.bezierCurveTo(cx - w, t + hh * 0.62, cx - w * 0.25, t + hh * 0.35, cx + sway * hf, t);
+        ctx.fillStyle = col; ctx.fill();
+      }
+      drop(1.0, 1.0, '#f77f00');
+      drop(0.62, 0.72, '#fcbf49');
+      drop(0.32, 0.36, '#4ea8de');
+    }
+    // Brenner
+    ctx.fillStyle = '#868e96'; ctx.strokeStyle = COL.outline; ctx.lineWidth = 3;
+    rr(cx - 20, tubeTop, 40, 58, 4); ctx.fill(); ctx.stroke();
+    rr(cx - 62, G.tableY - 14, 124, 14, 5); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+  function drawThermo() {
+    if (W.thermo <= 0) return;
+    var x = 1832, top = 205, bot = 432, span = bot - top - 12;
+    var yOf = function (T) { return bot - clamp(T / 900) * span; };
+    ctx.save();
+    ctx.globalAlpha = W.thermo;
+    // Röhre und Kugel
+    rr(x - 17, top, 34, bot - top + 24, 17); ctx.fillStyle = '#ffffff'; ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = COL.outline; ctx.stroke();
+    ctx.beginPath(); ctx.arc(x, bot + 24, 27, 0, TAU); ctx.fillStyle = '#e85d04'; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#e85d04';
+    var yT = yOf(W.T);
+    ctx.fillRect(x - 8, yT, 16, bot + 10 - yT);
+    // Skalenstriche
+    ctx.lineWidth = 3; ctx.strokeStyle = '#555';
+    for (var T = 0; T <= 900; T += 100) {
+      var yy = yOf(T); ctx.beginPath(); ctx.moveTo(x + 17, yy); ctx.lineTo(x + 30, yy); ctx.stroke();
+    }
+    // Curie-Marke
+    var yc = yOf(770);
+    ctx.setLineDash([8, 6]); ctx.lineWidth = 3; ctx.strokeStyle = COL.ink;
+    ctx.beginPath(); ctx.moveTo(x - 26, yc); ctx.lineTo(x + 40, yc); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = COL.ink; ctx.font = 'bold 36px ' + FONT; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText('770 °C', x - 34, yc);
+    // Anzeige
+    ctx.font = 'bold 54px ' + FONT; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = W.T >= 770 ? '#b5179e' : COL.ink;
+    ctx.fillText(Math.round(W.T) + ' °C', x - 34, yc + 98);
+    ctx.restore();
+  }
+
+  // ---------- Kompass ----------
+  function drawCompass() {
+    var c = W.compass;
+    if (!c.on || c.alpha <= 0.01) return;
+    ctx.save();
+    ctx.globalAlpha = c.alpha;
+    ctx.translate(c.x, c.y);
+    ctx.beginPath(); ctx.arc(0, 0, 70, 0, TAU);
+    ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.lineWidth = 5; ctx.strokeStyle = COL.outline; ctx.stroke();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#777';
+    for (var i = 0; i < 8; i++) {
+      var a = i * PI / 4; ctx.beginPath();
+      ctx.moveTo(Math.cos(a) * 58, Math.sin(a) * 58); ctx.lineTo(Math.cos(a) * 66, Math.sin(a) * 66); ctx.stroke();
+    }
+    ctx.rotate(c.a);
+    ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(56, 0); ctx.lineTo(0, 12); ctx.closePath();
+    ctx.fillStyle = COL.N; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = COL.outline; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(-56, 0); ctx.lineTo(0, 12); ctx.closePath();
+    ctx.fillStyle = '#e4e6e8'; ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 6, 0, TAU); ctx.fillStyle = COL.outline; ctx.fill();
+    ctx.restore();
+    // „N“ an der Nordspitze (aufrecht)
+    ctx.save();
+    ctx.globalAlpha = c.alpha;
+    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 20px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('N', c.x + Math.cos(c.a) * 28, c.y + Math.sin(c.a) * 28 + 1);
+    ctx.restore();
+  }
+
+  // ---------- Begriff „Elementarmagnet“ (Etappe 2) ----------
+  function drawEmLabel(g) {
+    var a = W.emLabel * g.int;
+    if (a <= 0.01 || W.hlIndex < 0) return;
+    var m = W.mags[W.hlIndex], p = magPos(m, g);
+    ctx.save();
+    ctx.globalAlpha = a;
+    // Ring um den markierten Magneten
+    ctx.beginPath(); ctx.arc(p.x, p.y, 44 * g.sc, 0, TAU);
+    ctx.lineWidth = 6; ctx.strokeStyle = COL.accent; ctx.stroke();
+    // Kasten mit Beispielmagnet und Begriff
+    ctx.font = 'bold 66px ' + FONT;
+    var tw = ctx.measureText('Elementarmagnet').width;
+    var bw = 200 + 50 + tw + 90, bx = 960 - bw / 2, by = 228, bh = 144;
+    rr(bx, by, bw, bh, 22); ctx.fillStyle = '#ffffff'; ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = COL.outline; ctx.stroke();
+    drawMagnet(bx + 45 + 100, by + bh / 2, PI, 200, 100, 52, 4);
+    ctx.fillStyle = COL.ink; ctx.font = 'bold 66px ' + FONT; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('Elementarmagnet', bx + 45 + 200 + 45, by + bh / 2 + 3);
+    // Pfeil vom Kasten zum Magneten
+    var sx = Math.min(bx + bw - 60, Math.max(bx + 60, p.x - 30)), sy = by + bh + 6;
+    var ex = p.x, ey = p.y - 46 * g.sc;
+    ctx.strokeStyle = COL.ink; ctx.fillStyle = COL.ink; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(ex, ey - 14); ctx.stroke();
+    arrowHead(ex, ey, Math.atan2(ey - sy, ex - sx), 26);
+    ctx.restore();
+  }
+
+  // ---------- Hinweiskasten ----------
+  function drawCallout() {
+    var co = W.coOv || W.co;
+    if (!co || !co.lines.length || W.scene !== 'nail') return;
+    ctx.save();
+    ctx.globalAlpha = co.a;
+    // Kasten höchstens 1120 px breit, damit liegende Büroklammern frei bleiben (Schrift nie unter 36 px)
+    var maxW = 0, f = 1, fonts, lhs;
+    for (var tries = 0; tries < 4; tries++) {
+      fonts = co.lines.map(function (l, i) { return (i === 0 && co.head ? 'bold ' + Math.round(44 * f) + 'px ' : Math.round(38 * f) + 'px ') + FONT; });
+      lhs = co.lines.map(function (l, i) { return Math.round((i === 0 && co.head ? 54 : 46) * f); });
+      maxW = 0;
+      co.lines.forEach(function (l, i) { ctx.font = fonts[i]; maxW = Math.max(maxW, ctx.measureText(l).width); });
+      if (maxW + 64 <= 1120 || f <= 0.95) break;
+      f = Math.max(0.95, f * (1056 / maxW));
+    }
+    var bw = maxW + 64, bh = lhs.reduce(function (s, v) { return s + v; }, 0) + 26;
+    var bx = 960 - bw / 2, by = co.pos === 'top' ? 205 : 750;
+    rr(bx, by, bw, bh, 16); ctx.fillStyle = COL.calloutBg; ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = COL.calloutBd; ctx.stroke();
+    ctx.fillStyle = COL.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    var y = by + 13;
+    co.lines.forEach(function (l, i) { ctx.font = fonts[i]; ctx.fillText(l, 960, y + lhs[i] / 2 + 2); y += lhs[i]; });
+    ctx.restore();
+  }
+
+  // ---------- Kopfzeile und Hinweise am Rand ----------
+  var headerCache = null;
+  function wrapSentence(text, maxW) {
+    if (ctx.measureText(text).width <= maxW) return [text];
+    // bevorzugt an Satzgrenzen umbrechen, sonst am Leerzeichen nahe der Mitte
+    var best = -1, bestD = 1e9, i;
+    for (i = 0; i < text.length - 1; i++) {
+      if ((text[i] === '.' || text[i] === ',') && text[i + 1] === ' ') {
+        var w1 = ctx.measureText(text.slice(0, i + 1)).width, w2 = ctx.measureText(text.slice(i + 2)).width;
+        if (w1 <= maxW && w2 <= maxW) { var d = Math.abs(w1 - w2) * (text[i] === '.' ? 0.5 : 1); if (d < bestD) { bestD = d; best = i; } }
+      }
+    }
+    if (best < 0) {
+      for (i = 0; i < text.length; i++) if (text[i] === ' ') {
+        var d2 = Math.abs(ctx.measureText(text.slice(0, i)).width - ctx.measureText(text.slice(i + 1)).width);
+        if (d2 < bestD) { bestD = d2; best = i - 1; }
+      }
+    }
+    return [text.slice(0, best + 1).trim(), text.slice(best + 2).trim()];
+  }
+  function drawHeader() {
+    var st = STAGES[cur];
+    ctx.fillStyle = COL.ink; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.font = 'bold 60px ' + FONT;
+    ctx.fillText(st.title, 960, 76);
+    ctx.font = '38px ' + FONT;
+    if (!headerCache) headerCache = wrapSentence(st.text, 1820);
+    headerCache.forEach(function (l, i) { ctx.fillText(l, 960, 132 + i * 46); });
+  }
+  function drawBadges(g) {
+    ctx.save();
+    ctx.font = '36px ' + FONT; ctx.fillStyle = '#4a4f55'; ctx.textBaseline = 'alphabetic';
+    if (W.scene === 'nail') {
+      ctx.textAlign = 'left';
+      ctx.fillText(g.z > 0.5 ? 'Ansicht: Blick ins Innere (Modell)' : 'Ansicht: Nagel von außen', 36, 952);
+    }
+    if (settings.slow) { ctx.textAlign = 'right'; ctx.font = 'bold 36px ' + FONT; ctx.fillText('Zeitlupe', 1884, 952); }
+    ctx.restore();
+  }
+
+  // ---------- Zusammenfassung ----------
+  function drawMini(x0, y0, w, h, aligned) {
+    ctx.save();
+    rr(x0, y0, w, h, 12); ctx.fillStyle = '#eef1f4'; ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = COL.outline; ctx.stroke();
+    var cols = 8, rows = 2, cw = w / cols, rh = h / rows;
+    for (var r = 0; r < rows; r++) for (var c = 0; c < cols; c++) {
+      var m = W.mags[r * 16 + c];
+      var ang = aligned ? PI : m.ra + rad(4) * Math.sin(TAU * m.f1 * S + m.p1);
+      drawMagnet(x0 + (c + 0.5) * cw, y0 + (r + 0.5) * rh, ang, 50, 25, 17, 3);
+    }
+    ctx.restore();
+  }
+  function drawSummary() {
+    var items = ['Eisen enthält Elementarmagnete.', 'Ungeordnet: unmagnetisch. Geordnet: magnetisch.', 'Streichen ordnet, Klopfen und Erhitzen machen Unordnung.'];
+    ctx.save();
+    items.forEach(function (t, i) {
+      var y = 270 + i * 100;
+      ctx.beginPath(); ctx.arc(200, y - 18, 34, 0, TAU); ctx.fillStyle = '#1d3557'; ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 40px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(String(i + 1), 200, y - 16);
+      var fs = 52;
+      ctx.font = 'bold ' + fs + 'px ' + FONT;
+      while (ctx.measureText(t).width > 1600 && fs > 40) { fs -= 2; ctx.font = 'bold ' + fs + 'px ' + FONT; }
+      ctx.fillStyle = COL.ink; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText(t, 262, y);
+    });
+    ctx.font = 'bold 38px ' + FONT; ctx.textAlign = 'center'; ctx.fillStyle = COL.ink;
+    ctx.fillText('Ungeordnet: unmagnetisch', 580, 590);
+    ctx.fillText('Geordnet: magnetisch', 1340, 590);
+    drawMini(300, 615, 560, 110, false);
+    drawMini(1060, 615, 560, 110, true);
+    ctx.restore();
+    poleMark(1000, 670, 'N', 1);
+    poleMark(1680, 670, 'S', 1);
+  }
+
+  function drawTable() {
+    ctx.save();
+    ctx.strokeStyle = '#6c757d'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(40, G.tableY); ctx.lineTo(1880, G.tableY); ctx.stroke();
+    ctx.restore();
+  }
+
+  function render() {
+    var k = cv.width / VW;
+    ctx.setTransform(k, 0, 0, cv.height / VH, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, VW, VH);
+    var g = geom();
+    if (W.scene === 'summary') {
+      drawSummary();
+    } else {
+      drawTable();
+      drawField(g);
+      drawBurner(g);
+      drawNail(g);
+      drawPoles(g);
+      W.clips.forEach(drawClip);
+      drawThermo();
+      drawArcGuide();
+      drawBar();
+      drawHammer(g);
+      drawImpacts(g);
+      drawCompass();
+      drawEmLabel(g);
+      drawCallout();
+    }
+    drawHeader();
+    drawBadges(g);
+  }
+
+  /* =====================================================================
+     START
+     ===================================================================== */
+
+  layout();
+  goto(1);
+  requestAnimationFrame(function (t) { last = t; frame(t); });
+
+  // Kleine Schnittstelle für automatische Tests (Playwright): Etappe setzen, Zeit vorspulen, Zustand lesen.
+  window.NagelAnimation = {
+    goto: goto,
+    forward: forward,
+    advance: function (sec) { stepSim(sec); render(); },
+    state: function () {
+      return {
+        stage: cur, predicting: predicting, waiting: !!(run && run.waiting()),
+        mx: W.mx, view: W.view.v, poleShow: W.poleShow,
+        clips: W.clips.map(function (c) { return { id: c.id, state: c.state }; }),
+        compass: { on: W.compass.on, a: W.compass.a, x: W.compass.x },
+        T: W.T, runnerDone: !!(run && run.i >= run.steps.length)
+      };
+    },
+    setSetting: function (k, v) { settings[k] = v; updateUI(); }
+  };
+})();
+</script>
+</body>
+</html>
